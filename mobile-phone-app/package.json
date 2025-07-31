@@ -1,0 +1,42 @@
+{
+  "name": "mobile-phone-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "backend": "npx tsx backend/server.ts",
+    "backend:dev": "npx tsx watch backend/server.ts",
+    "migrate": "npx tsx backend/database/migrate.ts up",
+    "migrate:rollback": "npx tsx backend/database/migrate.ts rollback",
+    "seed": "npx tsx backend/database/seed.ts",
+    "db:setup": "npm run migrate && npm run seed"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
+    "dotenv": "^17.2.1",
+    "express": "^4.21.2",
+    "mysql2": "^3.14.3",
+    "next": "15.4.5",
+    "node-fetch": "^2.7.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.5",
+    "tailwindcss": "^4",
+    "tsx": "^4.20.3",
+    "typescript": "^5"
+  }
+}
