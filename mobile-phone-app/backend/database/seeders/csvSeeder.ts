@@ -125,11 +125,26 @@ export class CSVSeeder {
   private async processCSVData(csvData: CSVRow[]): Promise<void> {
     console.log('Processing CSV data...');
     
+    // Remove duplicates based on brand and model combination
+    const uniquePhones = new Map<string, CSVRow>();
+    csvData.forEach(row => {
+      const key = `${row.brand.toLowerCase().trim()}-${row.model.toLowerCase().trim()}`;
+      if (!uniquePhones.has(key)) {
+        uniquePhones.set(key, row);
+      } else {
+        console.log(`Skipping duplicate phone: ${row.brand} ${row.model}`);
+      }
+    });
+    
+    const uniquePhonesList = Array.from(uniquePhones.values());
+    console.log(`Removed ${csvData.length - uniquePhonesList.length} duplicate phones from CSV data`);
+    console.log(`Processing ${uniquePhonesList.length} unique phones`);
+    
     // Process in batches to avoid overwhelming the database
     const batchSize = 50;
-    for (let i = 0; i < csvData.length; i += batchSize) {
-      const batch = csvData.slice(i, i + batchSize);
-      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(csvData.length / batchSize)}`);
+    for (let i = 0; i < uniquePhonesList.length; i += batchSize) {
+      const batch = uniquePhonesList.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(uniquePhonesList.length / batchSize)}`);
       
       for (const row of batch) {
         try {
@@ -328,16 +343,43 @@ export class CSVSeeder {
     const releaseDate = this.parseDate(row.release_date);
     const scrapedAt = this.parseTimestamp(row.scraped_at);
 
+    // First check if phone already exists
+    const existingPhone = await this.db.query(
+      'SELECT phone_id FROM phones WHERE brand_id = ? AND model = ?',
+      [brandId, row.model]
+    );
+
+    if (existingPhone.results.length > 0) {
+      console.log(`Phone already exists: ${row.brand} ${row.model}, updating...`);
+      const phoneId = existingPhone.results[0].phone_id;
+      
+      // Update existing phone
+      await this.db.query(`
+        UPDATE phones SET 
+          device_type = ?, 
+          release_date = ?, 
+          status = ?, 
+          detail_url = ?, 
+          image_url = ?, 
+          scraped_at = ?
+        WHERE phone_id = ?
+      `, [
+        row.device_type || 'Smartphone',
+        releaseDate,
+        this.mapStatus(row.status),
+        row.detail_url || null,
+        row.image_url || null,
+        scrapedAt,
+        phoneId
+      ]);
+      
+      return phoneId;
+    }
+
+    // Insert new phone
     const result = await this.db.query(`
       INSERT INTO phones (brand_id, model, device_type, release_date, status, detail_url, image_url, scraped_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        device_type = VALUES(device_type),
-        release_date = VALUES(release_date),
-        status = VALUES(status),
-        detail_url = VALUES(detail_url),
-        image_url = VALUES(image_url),
-        scraped_at = VALUES(scraped_at)
     `, [
       brandId,
       row.model,
@@ -349,10 +391,7 @@ export class CSVSeeder {
       scrapedAt
     ]);
 
-    return result.results.insertId || (await this.db.query(
-      'SELECT phone_id FROM phones WHERE brand_id = ? AND model = ?',
-      [brandId, row.model]
-    )).results[0].phone_id;
+    return result.results.insertId;
   }
 
   private async insertPhoneSpecifications(

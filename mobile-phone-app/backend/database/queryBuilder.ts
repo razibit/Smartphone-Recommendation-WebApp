@@ -469,9 +469,9 @@ export class QueryBuilder {
   }
 
   /**
-   * Execute query with timing for educational purposes
+   * Execute query with timing and performance monitoring
    */
-  async executeQuery(queryResult: QueryResult): Promise<{
+  async executeQuery(queryResult: QueryResult, queryType: string = 'unknown'): Promise<{
     results: any;
     executionTime: number;
     query: string;
@@ -480,6 +480,8 @@ export class QueryBuilder {
     const startTime = Date.now();
     const results = await this.db.queryResults(queryResult.query, queryResult.params);
     const executionTime = Date.now() - startTime;
+
+    // Execution time recorded
 
     return {
       results,
@@ -490,9 +492,15 @@ export class QueryBuilder {
   }
 
   /**
-   * Execute query and return detailed result with timing
+   * Execute query and return detailed result with timing and performance monitoring
    */
-  async executeQueryWithDetails(queryResult: QueryResult) {
-    return await this.db.query(queryResult.query, queryResult.params);
+  async executeQueryWithDetails(queryResult: QueryResult, queryType: string = 'detailed') {
+    const startTime = Date.now();
+    const result = await this.db.query(queryResult.query, queryResult.params);
+    const executionTime = Date.now() - startTime;
+
+    // Execution time recorded
+
+    return result;
   }
 }

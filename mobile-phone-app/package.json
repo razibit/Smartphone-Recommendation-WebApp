@@ -7,12 +7,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "analyze": "ANALYZE=true npm run build",
+    "optimize": "node scripts/run-performance-optimizations.js",
+    "test:scalability": "node test-scalability.js",
+    "build:optimized": "NODE_ENV=production npm run build",
     "backend": "npx tsx backend/server.ts",
     "backend:dev": "npx tsx watch backend/server.ts",
     "migrate": "npx tsx backend/database/migrate.ts up",
     "migrate:rollback": "npx tsx backend/database/migrate.ts rollback",
     "seed": "npx tsx backend/database/seed.ts",
-    "db:setup": "npm run migrate && npm run seed"
+    "db:clean": "npx tsx backend/database/clean.ts",
+    "db:setup": "npm run migrate && npm run seed",
+    "db:reset": "npm run db:clean && npm run seed"
   },
   "dependencies": {
     "cors": "^2.8.5",

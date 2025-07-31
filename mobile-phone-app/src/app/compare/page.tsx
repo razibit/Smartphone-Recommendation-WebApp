@@ -2,10 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import PhoneComparison, { PhoneDetails } from '@/components/PhoneComparison';
+import { PhoneDetails } from '@/components/PhoneComparison';
 import { ToastContainer } from '@/components/Toast';
 import { useToast } from '@/hooks/useToast';
 import { apiClient } from '@/lib/api/client';
+import { DynamicComponents } from '@/lib/dynamicImports';
+
+// Use dynamic import for better performance
+const { PhoneComparison } = DynamicComponents;
 
 export default function ComparePage() {
   const searchParams = useSearchParams();

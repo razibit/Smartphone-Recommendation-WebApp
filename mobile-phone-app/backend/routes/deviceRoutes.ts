@@ -43,6 +43,7 @@ const validateDeviceId = (req: express.Request, res: express.Response, next: exp
   next();
 };
 
+// Routes without caching middleware
 // GET /api/devices/filters - Get filter options (must be before /:id)
 router.get('/filters', deviceController.getFilterOptions);
 

@@ -15,13 +15,29 @@ class MigrationRunner {
   private connection: mysql.Connection | null = null;
 
   async connect(): Promise<void> {
-    this.connection = await mysql.createConnection({
-      host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || 'bbbb',
-      database: process.env.DB_NAME || 'mobile_specs',
-      multipleStatements: true
-    });
+    // First try to connect without specifying database
+    try {
+      this.connection = await mysql.createConnection({
+        host: process.env.DB_HOST || 'localhost',
+        user: process.env.DB_USER || 'root',
+        password: process.env.DB_PASSWORD || 'bbbb',
+        database: process.env.DB_NAME || 'mobile_specs',
+        multipleStatements: true
+      });
+    } catch (error: any) {
+      // If database doesn't exist, connect without specifying database
+      if (error.code === 'ER_BAD_DB_ERROR') {
+        console.log('Database does not exist, connecting without database...');
+        this.connection = await mysql.createConnection({
+          host: process.env.DB_HOST || 'localhost',
+          user: process.env.DB_USER || 'root',
+          password: process.env.DB_PASSWORD || 'bbbb',
+          multipleStatements: true
+        });
+      } else {
+        throw error;
+      }
+    }
     console.log('Connected to MySQL server');
   }
 

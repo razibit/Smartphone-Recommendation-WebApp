@@ -3,11 +3,15 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import SQLQueryBox from '@/components/SQLQueryBox'; 
-import PhoneDetails from '@/components/PhoneDetails';
+import { DynamicComponents } from '@/lib/dynamicImports';
+
+// Use dynamic imports for better performance
+const { SQLQueryBox, PhoneDetails } = DynamicComponents;
 
 export default function Home() {
   const [showDemoModal, setShowDemoModal] = useState(false);
+  
+
 
   return (
     <div className="min-h-screen">
@@ -350,6 +354,8 @@ LIMIT 20 OFFSET 0`}
         isOpen={showDemoModal}
         onClose={() => setShowDemoModal(false)}
       />
+      
+
     </div>
   );
 }

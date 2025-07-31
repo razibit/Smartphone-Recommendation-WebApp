@@ -2,9 +2,7 @@
 -- Migration: 001_create_schema
 -- Description: Create normalized database schema with all tables and indexes
 
--- Drop database if exists and create new one
-DROP DATABASE IF EXISTS mobile_specs;
-CREATE DATABASE mobile_specs;
+-- Use the existing database
 USE mobile_specs;
 
 -- 1. Brands table (eliminates brand redundancy)

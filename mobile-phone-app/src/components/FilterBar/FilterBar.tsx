@@ -72,6 +72,7 @@ export default function FilterBar({ onFilterApply, onFilterReset, loading = fals
       cleanFilters.priceRange = filters.priceRange;
     }
 
+    console.log('🔍 FilterBar: Applying filters:', cleanFilters);
     onFilterApply(cleanFilters);
   };
 
@@ -250,14 +251,14 @@ export default function FilterBar({ onFilterApply, onFilterReset, loading = fals
       {/* Price Range Filter */}
       {filterOptions?.priceRange && (
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Price Range ($)
-          </label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Price Range (৳)
+              </label>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <input
                 type="number"
-                placeholder={`Min ($${filterOptions.priceRange.min})`}
+                placeholder={`Min (৳${filterOptions.priceRange.min})`}
                 value={filters.priceRange?.min || ''}
                 onChange={(e) => handlePriceRangeChange('min', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -266,7 +267,7 @@ export default function FilterBar({ onFilterApply, onFilterReset, loading = fals
             <div>
               <input
                 type="number"
-                placeholder={`Max ($${filterOptions.priceRange.max})`}
+                placeholder={`Max (৳${filterOptions.priceRange.max})`}
                 value={filters.priceRange?.max || ''}
                 onChange={(e) => handlePriceRangeChange('max', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"

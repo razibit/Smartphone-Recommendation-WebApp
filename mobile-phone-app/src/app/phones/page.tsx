@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import FilterBar from '@/components/FilterBar';
-import PhoneList from '@/components/PhoneList';
-import SQLQueryBox from '@/components/SQLQueryBox';
-import PhoneDetails from '@/components/PhoneDetails';
 import { ToastContainer } from '@/components/Toast';
 import { useToast } from '@/hooks/useToast';
 import { FilterCriteria, PhoneSearchResponse, apiClient } from '@/lib/api/client';
+import { DynamicComponents } from '@/lib/dynamicImports';
+
+// Destructure dynamic components for cleaner code
+const { FilterBar, PhoneList, SQLQueryBox, PhoneDetails } = DynamicComponents;
 
 export default function PhonesPage() {
   const [searchResults, setSearchResults] = useState<PhoneSearchResponse | null>(null);
   const [currentFilters, setCurrentFilters] = useState<FilterCriteria>({});
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [sqlQuery, setSqlQuery] = useState<string | null>(null);
   const [executionTime, setExecutionTime] = useState<number | null>(null);
@@ -24,15 +25,17 @@ export default function PhonesPage() {
   
   const toast = useToast();
 
-  const handleFilterApply = async (filters: FilterCriteria) => {
-    console.log('Applying filters:', filters);
+  const handleFilterApply = async (filters: FilterCriteria, page: number = 1) => {
+    console.log('📄 handleFilterApply called with:', { filters, page });
+    console.log('📄 Filters type:', typeof filters, 'Is empty:', Object.keys(filters).length === 0);
     setLoading(true);
-    setCurrentFilters(filters);
+    setCurrentFilters(filters); // Store filters even if empty - pagination needs this context
+    setCurrentPage(page);
     setRetryCount(0);
     
     try {
-      // Make actual API call to backend
-      const response = await apiClient.searchPhones(filters);
+      // Make actual API call to backend with pagination
+      const response = await apiClient.searchPhones(filters, 'p.phone_id', 'asc', page, 20);
       
       if (response.success && response.data) {
         setSearchResults(response.data);
@@ -125,6 +128,7 @@ export default function PhonesPage() {
   const handleFilterReset = () => {
     console.log('Resetting filters');
     setCurrentFilters({});
+    setCurrentPage(1);
     setSearchResults(null);
     setSqlQuery(null);
     setExecutionTime(null);
@@ -135,6 +139,23 @@ export default function PhonesPage() {
       'All filters have been cleared',
       2000
     );
+  };
+
+  const handlePageChange = async (page: number) => {
+    console.log('🚀 handlePageChange called with page:', page);
+    console.log('Current filters:', currentFilters);
+    console.log('Search results exist:', !!searchResults);
+    
+    // Allow pagination if we have search results, regardless of filter complexity
+    if (searchResults) {
+      console.log('✅ Search results exist, proceeding with pagination');
+      // Scroll to top for better UX
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      console.log('📄 Calling handleFilterApply with page:', page);
+      await handleFilterApply(currentFilters, page);
+    } else {
+      console.log('❌ No search results available, cannot paginate');
+    }
   };
 
   const handlePhoneSelect = (phoneId: number) => {
@@ -189,7 +210,7 @@ export default function PhonesPage() {
   const handleRetrySearch = () => {
     if (Object.keys(currentFilters).length > 0) {
       setRetryCount(prev => prev + 1);
-      handleFilterApply(currentFilters);
+      handleFilterApply(currentFilters, currentPage);
     }
   };
 
@@ -215,7 +236,7 @@ export default function PhonesPage() {
         {/* Filter Section */}
         <div className="mb-8">
           <FilterBar
-            onFilterApply={handleFilterApply}
+            onFilterApply={(filters) => handleFilterApply(filters, 1)}
             onFilterReset={handleFilterReset}
             loading={loading}
           />
@@ -230,6 +251,7 @@ export default function PhonesPage() {
             onPhoneCompare={handlePhoneCompare}
             onViewDetails={handleViewDetails}
             selectedPhones={selectedPhones}
+            onPageChange={handlePageChange}
           />
         </div>
 

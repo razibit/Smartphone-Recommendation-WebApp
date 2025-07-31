@@ -167,7 +167,7 @@ export default function PhoneDetails({ phoneId, isOpen, onClose }: PhoneDetailsP
 
   const formatPrice = (price?: number) => {
     if (!price || price === 0) return null;
-    return `$${price.toLocaleString()}`;
+    return `৳${price.toLocaleString()}`;
   };
 
   const formatDate = (dateString?: string) => {

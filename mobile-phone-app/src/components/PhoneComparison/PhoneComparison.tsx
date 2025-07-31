@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { OptimizedImage } from '@/components/UI';
 
 export interface PhoneDetails {
   phone_id: number;
@@ -53,8 +54,8 @@ const comparisonFields: ComparisonRow[] = [
   
   // Battery & Price
   { label: 'Battery', key: 'battery_capacity', category: 'Battery', highlightDifferences: true, formatter: (val) => val ? `${val}mAh` : 'N/A' },
-  { label: 'Price (Unofficial)', key: 'price_unofficial', category: 'Pricing', highlightDifferences: true, formatter: (val) => val ? `$${val.toLocaleString()}` : 'N/A' },
-  { label: 'Price (Official)', key: 'price_official', category: 'Pricing', highlightDifferences: true, formatter: (val) => val ? `$${val.toLocaleString()}` : 'N/A' },
+      { label: 'Price (Unofficial)', key: 'price_unofficial', category: 'Pricing', highlightDifferences: true, formatter: (val) => val ? `৳${val.toLocaleString()}` : 'N/A' },
+    { label: 'Price (Official)', key: 'price_official', category: 'Pricing', highlightDifferences: true, formatter: (val) => val ? `৳${val.toLocaleString()}` : 'N/A' },
 ];
 
 export default function PhoneComparison({ phones, onRemovePhone, loading = false }: PhoneComparisonProps) {
@@ -153,20 +154,14 @@ export default function PhoneComparison({ phones, onRemovePhone, loading = false
           <div key={phone.phone_id} className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
             {/* Phone Header */}
             <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                {phone.image_url ? (
-                  <img
-                    src={phone.image_url}
-                    alt={`${phone.brand_name} ${phone.model}`}
-                    className="w-12 h-12 object-contain rounded-lg bg-white"
-                  />
-                ) : (
-                  <div className="w-12 h-12 bg-gray-200 dark:bg-gray-600 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                )}
+                          <div className="flex items-center space-x-3">
+              <OptimizedImage
+                src={phone.image_url}
+                alt={`${phone.brand_name} ${phone.model}`}
+                className="w-12 h-12 rounded-lg bg-white shadow-sm"
+                sizes="48px"
+                priority
+              />
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-white">
                     {phone.brand_name} {phone.model}
@@ -224,19 +219,13 @@ export default function PhoneComparison({ phones, onRemovePhone, loading = false
               {phones.map((phone, index) => (
                 <th key={phone.phone_id} className="text-center p-4 min-w-64">
                   <div className="flex flex-col items-center space-y-2">
-                    {phone.image_url ? (
-                      <img
-                        src={phone.image_url}
-                        alt={`${phone.brand_name} ${phone.model}`}
-                        className="w-16 h-16 object-contain rounded-lg bg-white"
-                      />
-                    ) : (
-                      <div className="w-16 h-16 bg-gray-200 dark:bg-gray-600 rounded-lg flex items-center justify-center">
-                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                      </div>
-                    )}
+                    <OptimizedImage
+                      src={phone.image_url}
+                      alt={`${phone.brand_name} ${phone.model}`}
+                      className="w-16 h-16 rounded-lg bg-white shadow-sm"
+                      sizes="64px"
+                      priority
+                    />
                     <div className="text-center">
                       <h3 className="font-semibold text-gray-900 dark:text-white text-sm">
                         {phone.brand_name}

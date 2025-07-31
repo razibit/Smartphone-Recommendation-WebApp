@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import PhoneCard from './PhoneCard';
+import { SkeletonCard } from '@/components/UI';
 import { Phone, PhoneSearchResponse } from '@/lib/api/client';
 
 interface PhoneListProps {
@@ -11,6 +12,7 @@ interface PhoneListProps {
   onPhoneCompare?: (phoneIds: number[]) => void;
   onViewDetails?: (phoneId: number) => void;
   selectedPhones?: number[];
+  onPageChange?: (page: number) => void;
 }
 
 export default function PhoneList({
@@ -19,7 +21,8 @@ export default function PhoneList({
   onPhoneSelect,
   onPhoneCompare,
   onViewDetails,
-  selectedPhones = []
+  selectedPhones = [],
+  onPageChange
 }: PhoneListProps) {
   const [localSelectedPhones, setLocalSelectedPhones] = useState<number[]>(selectedPhones);
 
@@ -48,26 +51,7 @@ export default function PhoneList({
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {[...Array(8)].map((_, index) => (
-            <div key={index} className="bg-gray-100 dark:bg-gray-700 rounded-2xl animate-pulse">
-              <div className="aspect-[4/3] bg-gray-200 dark:bg-gray-600 rounded-t-2xl"></div>
-              <div className="p-6 space-y-4">
-                <div className="space-y-2">
-                  <div className="h-5 bg-gray-200 dark:bg-gray-600 rounded w-3/4"></div>
-                  <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-1/2"></div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-16 bg-gray-200 dark:bg-gray-600 rounded-lg"></div>
-                  ))}
-                </div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-1/3"></div>
-                <div className="h-6 bg-gray-200 dark:bg-gray-600 rounded w-1/2"></div>
-                <div className="flex space-x-2">
-                  <div className="flex-1 h-10 bg-gray-200 dark:bg-gray-600 rounded-lg"></div>
-                  <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-lg"></div>
-                </div>
-              </div>
-            </div>
+            <SkeletonCard key={index} className="animate-pulse" />
           ))}
         </div>
       </div>
@@ -130,7 +114,19 @@ export default function PhoneList({
     );
   }
 
-  const phones = searchResponse.phones;
+  // Filter out duplicate phones based on phone_id
+  const uniquePhones = searchResponse.phones.filter((phone, index, array) => 
+    array.findIndex(p => p.phone_id === phone.phone_id) === index
+  );
+  
+  // Debug log to track duplicate filtering
+  if (searchResponse.phones.length !== uniquePhones.length) {
+    console.log(`Filtered out ${searchResponse.phones.length - uniquePhones.length} duplicate phones`);
+    console.log('Original phones:', searchResponse.phones.length);
+    console.log('Unique phones:', uniquePhones.length);
+  }
+  
+  const phones = uniquePhones;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-card p-6">
@@ -141,7 +137,7 @@ export default function PhoneList({
             Phone Results
           </h2>
           <span className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-3 py-1 rounded-full text-sm font-medium">
-            {searchResponse.pagination.total} phones found
+            {phones.length} phones found
           </span>
         </div>
 
@@ -193,7 +189,7 @@ export default function PhoneList({
                 if (range.min || range.max) {
                   return (
                     <span key={key} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-                      Price: ${range.min || 0} - ${range.max || '∞'}
+                      Price: ৳{range.min || 0} - ৳{range.max || '∞'}
                     </span>
                   );
                 }
@@ -211,9 +207,9 @@ export default function PhoneList({
 
       {/* Phone Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {phones.map((phone) => (
+        {phones.map((phone, index) => (
           <PhoneCard
-            key={phone.phone_id}
+            key={`${phone.phone_id}-${phone.brand_name}-${phone.model}-${index}`}
             phone={phone}
             isSelected={localSelectedPhones.includes(phone.phone_id)}
             onSelect={onPhoneSelect}
@@ -225,7 +221,7 @@ export default function PhoneList({
 
       {/* Pagination */}
       {searchResponse.pagination.totalPages > 1 && (
-        <div className="mt-8 flex items-center justify-between">
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0">
           <div className="text-sm text-gray-700 dark:text-gray-300">
             Showing <span className="font-medium">{((searchResponse.pagination.page - 1) * searchResponse.pagination.limit) + 1}</span> to{' '}
             <span className="font-medium">
@@ -236,19 +232,43 @@ export default function PhoneList({
           <div className="flex items-center space-x-2">
             <button
               disabled={searchResponse.pagination.page <= 1}
-              className="relative inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => {
+                console.log('Previous button clicked, current page:', searchResponse.pagination.page);
+                console.log('onPageChange function:', onPageChange);
+                const prevPage = searchResponse.pagination.page - 1;
+                console.log('Going to page:', prevPage);
+                if (onPageChange) {
+                  onPageChange(prevPage);
+                } else {
+                  console.error('onPageChange is not defined!');
+                }
+              }}
+              className="relative inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
             >
               <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
               Previous
             </button>
-            <span className="text-sm text-gray-700 dark:text-gray-300">
-              Page {searchResponse.pagination.page} of {searchResponse.pagination.totalPages}
-            </span>
+            <div className="flex items-center space-x-1">
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                Page {searchResponse.pagination.page} of {searchResponse.pagination.totalPages}
+              </span>
+            </div>
             <button
               disabled={searchResponse.pagination.page >= searchResponse.pagination.totalPages}
-              className="relative inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => {
+                console.log('Next button clicked, current page:', searchResponse.pagination.page);
+                console.log('onPageChange function:', onPageChange);
+                const nextPage = searchResponse.pagination.page + 1;
+                console.log('Going to page:', nextPage);
+                if (onPageChange) {
+                  onPageChange(nextPage);
+                } else {
+                  console.error('onPageChange is not defined!');
+                }
+              }}
+              className="relative inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
             >
               Next
               <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
