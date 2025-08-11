@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '@/lib/api/client';
+import { ModalSQLPopup } from '@/components/SQLQueryBox';
 
 interface PhoneDetailsProps {
   phoneId: number | null;
@@ -115,11 +116,19 @@ export default function PhoneDetails({ phoneId, isOpen, onClose }: PhoneDetailsP
   const [phone, setPhone] = useState<DetailedPhone | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sqlQuery, setSqlQuery] = useState<string | null>(null);
+  const [executionTime, setExecutionTime] = useState<number | null>(null);
+  const [showSQLPopup, setShowSQLPopup] = useState(false);
 
   // Fetch phone details when phoneId changes and modal is open
   useEffect(() => {
     if (phoneId && isOpen) {
       fetchPhoneDetails(phoneId);
+    } else if (!isOpen) {
+      // Reset SQL popup state when modal closes
+      setSqlQuery(null);
+      setExecutionTime(null);
+      setShowSQLPopup(false);
     }
   }, [phoneId, isOpen]);
 
@@ -154,6 +163,13 @@ export default function PhoneDetails({ phoneId, isOpen, onClose }: PhoneDetailsP
       
       if (response.success && response.data) {
         setPhone(response.data.phone);
+        setSqlQuery(response.sqlQuery || null);
+        setExecutionTime(response.executionTime || null);
+        
+        // Show SQL popup when query is available
+        if (response.sqlQuery) {
+          setShowSQLPopup(true);
+        }
       } else {
         setError(response.error?.message || 'Failed to load phone details');
       }
@@ -207,6 +223,18 @@ export default function PhoneDetails({ phoneId, isOpen, onClose }: PhoneDetailsP
       {/* Modal */}
       <div className="flex items-center justify-center min-h-screen p-4">
         <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+          {/* Modal SQL Popup - positioned at top-right of modal */}
+          {showSQLPopup && sqlQuery && (
+            <div className="absolute top-4 right-4 z-50">
+              <ModalSQLPopup
+                query={sqlQuery}
+                executionTime={executionTime || undefined}
+                resultCount={1} // Phone details always returns 1 result
+                onClose={() => setShowSQLPopup(false)}
+              />
+            </div>
+          )}
+          
           {/* Header */}
           <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-3">

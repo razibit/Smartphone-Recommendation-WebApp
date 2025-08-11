@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   // Performance optimizations
   compress: true,
   
+  // Enable standalone output for Docker
+  output: 'standalone',
+  
   // Bundle optimization
   experimental: {
     // optimizeCss: true, // Disabled due to missing critters dependency
@@ -108,7 +111,6 @@ const nextConfig: NextConfig = {
   },
   
   // Output configuration for better performance
-  output: 'standalone',
   poweredByHeader: false,
   
   // TypeScript and ESLint configuration

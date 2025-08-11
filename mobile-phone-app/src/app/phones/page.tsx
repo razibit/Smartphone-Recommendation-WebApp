@@ -9,6 +9,9 @@ import { DynamicComponents } from '@/lib/dynamicImports';
 // Destructure dynamic components for cleaner code
 const { FilterBar, PhoneList, SQLQueryBox, PhoneDetails } = DynamicComponents;
 
+// Import FloatingSQLPopup directly
+import { FloatingSQLPopup } from '@/components/SQLQueryBox';
+
 export default function PhonesPage() {
   const [searchResults, setSearchResults] = useState<PhoneSearchResponse | null>(null);
   const [currentFilters, setCurrentFilters] = useState<FilterCriteria>({});
@@ -18,6 +21,7 @@ export default function PhonesPage() {
   const [executionTime, setExecutionTime] = useState<number | null>(null);
   const [selectedPhones, setSelectedPhones] = useState<number[]>([]);
   const [showSQLQuery, setShowSQLQuery] = useState(true);
+  const [showSQLPopup, setShowSQLPopup] = useState(false);
   const [selectedPhoneId, setSelectedPhoneId] = useState<number | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
@@ -41,6 +45,11 @@ export default function PhonesPage() {
         setSearchResults(response.data);
         setSqlQuery(response.sqlQuery || null);
         setExecutionTime(response.executionTime || null);
+        
+        // Show SQL popup when query is available
+        if (response.sqlQuery) {
+          setShowSQLPopup(true);
+        }
         
         // Show success message with results count
         const resultCount = response.data.pagination.total;
@@ -133,6 +142,7 @@ export default function PhonesPage() {
     setSqlQuery(null);
     setExecutionTime(null);
     setSelectedPhones([]);
+    setShowSQLPopup(false);
     
     toast.info(
       'Filters Reset',
@@ -255,43 +265,15 @@ export default function PhonesPage() {
           />
         </div>
 
-        {/* SQL Query Visualization */}
-        {sqlQuery && (
-          <div className="mb-8">
-            <SQLQueryBox
-              query={sqlQuery}
-              visible={showSQLQuery}
-              executionTime={executionTime || undefined}
-              resultCount={searchResults?.pagination.total}
-              onToggleVisibility={setShowSQLQuery}
-            />
-          </div>
+        {/* Floating SQL Query Popup */}
+        {showSQLPopup && sqlQuery && (
+          <FloatingSQLPopup
+            query={sqlQuery}
+            executionTime={executionTime || undefined}
+            resultCount={searchResults?.pagination.total}
+            onClose={() => setShowSQLPopup(false)}
+          />
         )}
-
-        {/* Implementation Status */}
-        <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 border border-green-200 dark:border-green-800 rounded-xl p-6">
-          <div className="flex items-start space-x-3">
-            <div className="w-6 h-6 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-semibold text-green-900 dark:text-green-100 mb-1">
-                PhoneDetails Implementation Complete ✅
-              </h3>
-              <p className="text-green-800 dark:text-green-200 text-sm mb-2">
-                The PhoneDetails modal is now fully functional with comprehensive specifications and responsive design!
-              </p>
-              <ul className="text-sm text-green-700 dark:text-green-300 space-y-1">
-                <li>✅ Task 9: FilterBar component (completed)</li>
-                <li>✅ Task 10: PhoneList component with responsive grid (completed)</li>
-                <li>✅ Task 11: SQLQueryBox component with syntax highlighting (completed)</li>
-                <li>✅ Task 12: PhoneDetails component (completed)</li>
-              </ul>
-            </div>
-          </div>
-        </div>
 
         {/* Offline/Connection Status Banner */}
         {!isOnline && (
