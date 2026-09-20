@@ -2,8 +2,6 @@
 -- Description: Fix column sizes for color_name and aspect_ratio
 -- Date: 2025-08-01
 
-USE mobile_specs;
-
 -- Fix color_name column size
 ALTER TABLE phone_colors MODIFY COLUMN color_name VARCHAR(100);
 

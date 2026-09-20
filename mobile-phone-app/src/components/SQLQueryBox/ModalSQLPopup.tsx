@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { copyText } from '@/lib/copyText';
 
 interface ModalSQLPopupProps {
   query: string;
@@ -20,11 +21,11 @@ export default function ModalSQLPopup({
 
   const handleCopyQuery = async () => {
     try {
-      await navigator.clipboard.writeText(query);
+      await copyText(query);
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy query:', err);
+    } catch {
+      setCopySuccess(false);
     }
   };
 

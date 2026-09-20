@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { copyText } from '@/lib/copyText';
 
 interface FloatingSQLPopupProps {
   query: string;
@@ -29,11 +30,11 @@ export default function FloatingSQLPopup({
 
   const handleCopyQuery = async () => {
     try {
-      await navigator.clipboard.writeText(query);
+      await copyText(query);
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy query:', err);
+    } catch {
+      setCopySuccess(false);
     }
   };
 
@@ -51,7 +52,7 @@ export default function FloatingSQLPopup({
   };
 
   // SQL Syntax Highlighter (simplified for preview)
-  const highlightSQL = (sqlQuery: string): JSX.Element[] => {
+  const highlightSQL = (sqlQuery: string): React.ReactElement[] => {
     if (!sqlQuery) return [];
 
     const keywords = [
@@ -72,7 +73,7 @@ export default function FloatingSQLPopup({
       '(\\s+)' // Whitespace
     ].join('|'), 'gi');
 
-    const tokens: JSX.Element[] = [];
+    const tokens: React.ReactElement[] = [];
     let match;
     let lastIndex = 0;
 
@@ -122,7 +123,17 @@ export default function FloatingSQLPopup({
           className={`p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${
             !isExpanded ? 'border-b border-gray-200 dark:border-gray-700' : ''
           }`}
+          role="button"
+          tabIndex={0}
+          aria-expanded={isExpanded}
+          aria-controls="floating-sql-query-content"
           onClick={() => setIsExpanded(!isExpanded)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              setIsExpanded((expanded) => !expanded);
+            }
+          }}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -160,6 +171,8 @@ export default function FloatingSQLPopup({
             <div className="flex items-center space-x-2">
               {/* Expand/Collapse Button */}
               <button
+                type="button"
+                aria-label={isExpanded ? 'Collapse SQL query' : 'Expand SQL query'}
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsExpanded(!isExpanded);
@@ -179,6 +192,8 @@ export default function FloatingSQLPopup({
 
               {/* Close Button */}
               <button
+                type="button"
+                aria-label="Close SQL query"
                 onClick={(e) => {
                   e.stopPropagation();
                   onClose();
@@ -212,7 +227,7 @@ export default function FloatingSQLPopup({
 
         {/* Expanded Content */}
         {isExpanded && (
-          <div className="border-t border-gray-200 dark:border-gray-700">
+          <div id="floating-sql-query-content" className="border-t border-gray-200 dark:border-gray-700">
             {/* Action Buttons */}
             <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 flex items-center justify-between">
               <div className="text-xs text-gray-600 dark:text-gray-400">

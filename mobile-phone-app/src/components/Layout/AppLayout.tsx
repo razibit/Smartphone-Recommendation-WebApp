@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -8,222 +8,153 @@ interface AppLayoutProps {
   children: React.ReactNode;
 }
 
+const navItems = [
+  { href: '/', label: 'Home', icon: '⌂' },
+  { href: '/phones', label: 'Browse Phones', icon: '▣' },
+  { href: '/compare', label: 'Compare', icon: '⇄' },
+];
+
 export default function AppLayout({ children }: AppLayoutProps) {
+  const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const pathname = usePathname();
 
-  // Handle scroll effect for header
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
-    };
-
-    window.addEventListener('scroll', handleScroll);
+    const handleScroll = () => setIsScrolled(window.scrollY > 10);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Close mobile menu when route changes
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
-  // Prevent body scroll when mobile menu is open
   useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsMobileMenuOpen(false);
+    };
+
     if (isMobileMenuOpen) {
       document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
+      document.addEventListener('keydown', handleKeyDown);
     }
 
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isMobileMenuOpen]);
 
-  const navItems = [
-    { href: '/', label: 'Home', icon: '🏠' },
-    { href: '/phones', label: 'Browse Phones', icon: '📱' },
-    { href: '/compare', label: 'Compare', icon: '⚖️' },
-  ];
-
-  const isActive = (href: string) => {
-    if (href === '/') return pathname === '/';
-    return pathname.startsWith(href);
-  };
+  const isActive = (href: string) => href === '/' ? pathname === '/' : pathname.startsWith(href);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Enhanced Header */}
-      <header className={`sticky top-0 z-40 transition-all duration-300 ${
-        isScrolled 
-          ? 'bg-white/90 dark:bg-gray-900/90 backdrop-blur-lg shadow-lg border-b border-gray-200/50 dark:border-gray-700/50' 
-          : 'bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700'
-      }`}>
-        <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16 lg:h-20">
-            {/* Logo */}
-            <Link 
-              href="/" 
-              className="flex items-center space-x-3 group transition-transform duration-200 hover:scale-105"
-            >
-              <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow duration-200">
-                <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-700 dark:from-primary-400 dark:to-primary-500 bg-clip-text text-transparent">
-                  PhoneDB
-                </h1>
-                <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
-                  Mobile Phone Database
-                </p>
-              </div>
+    <div className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-900">
+      <header className={
+        isScrolled
+          ? 'sticky top-0 z-50 border-b border-gray-200/80 bg-white/95 shadow-sm backdrop-blur dark:border-gray-800/80 dark:bg-gray-900/95'
+          : 'sticky top-0 z-50 border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900'
+      }>
+        <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" aria-label="Primary navigation">
+          <div className="flex h-16 items-center justify-between lg:h-20">
+            <Link href="/" className="flex items-center gap-3" aria-label="PhoneDB home">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600 text-lg font-bold text-white">
+                P
+              </span>
+              <span>
+                <span className="block text-lg font-bold text-gray-950 dark:text-white">PhoneDB</span>
+                <span className="hidden text-xs text-gray-500 dark:text-gray-400 sm:block">Mobile phone catalogue</span>
+              </span>
             </Link>
 
-            {/* Desktop Navigation */}
-            <div className="hidden lg:flex items-center space-x-1">
+            <div className="hidden items-center gap-1 lg:flex">
               {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${
+                  aria-current={isActive(item.href) ? 'page' : undefined}
+                  className={
                     isActive(item.href)
-                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
-                  }`}
+                      ? 'rounded-lg bg-primary-50 px-4 py-2 font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                      : 'rounded-lg px-4 py-2 font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-950 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
+                  }
                 >
-                  <span className="text-lg">{item.icon}</span>
-                  <span>{item.label}</span>
+                  <span aria-hidden="true" className="mr-2">{item.icon}</span>
+                  {item.label}
                 </Link>
               ))}
             </div>
 
-            {/* Mobile Menu Button */}
             <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200 focus:ring-2 focus:ring-primary-500 focus:outline-none"
-              aria-label="Toggle mobile menu"
+              type="button"
+              className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-primary-600 dark:text-gray-300 dark:hover:bg-gray-800 lg:hidden"
+              aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-navigation"
+              onClick={() => setIsMobileMenuOpen((open) => !open)}
             >
-              <svg 
-                className={`w-6 h-6 transition-transform duration-200 ${isMobileMenuOpen ? 'rotate-90' : ''}`} 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                {isMobileMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
+              <span aria-hidden="true" className="text-xl">{isMobileMenuOpen ? '×' : '☰'}</span>
             </button>
           </div>
         </nav>
 
-        {/* Mobile Menu */}
-        <div className={`lg:hidden transition-all duration-300 ease-in-out ${
-          isMobileMenuOpen 
-            ? 'max-h-screen opacity-100' 
-            : 'max-h-0 opacity-0 overflow-hidden'
-        }`}>
-          <div className="px-4 py-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
-            <div className="space-y-2">
-              {navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                    isActive(item.href)
-                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  <span className="text-xl">{item.icon}</span>
-                  <span className="text-lg">{item.label}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile Menu Overlay */}
         {isMobileMenuOpen && (
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-25 lg:hidden"
-            onClick={() => setIsMobileMenuOpen(false)}
-            style={{ zIndex: -1 }}
-          />
+          <>
+            <button
+              type="button"
+              aria-label="Close navigation menu"
+              className="fixed inset-0 top-16 z-30 bg-black/30 lg:hidden"
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            <div id="mobile-navigation" className="relative z-40 border-t border-gray-200 bg-white px-4 py-4 dark:border-gray-800 dark:bg-gray-900 lg:hidden">
+              <div className="mx-auto max-w-7xl space-y-1">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={isActive(item.href) ? 'page' : undefined}
+                    className={
+                      isActive(item.href)
+                        ? 'block rounded-lg bg-primary-50 px-4 py-3 font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                        : 'block rounded-lg px-4 py-3 font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+                    }
+                  >
+                    <span aria-hidden="true" className="mr-3">{item.icon}</span>
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </>
         )}
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1">
-        {children}
-      </main>
+      <main className="flex-1">{children}</main>
 
-      {/* Enhanced Footer */}
-      <footer className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Brand Section */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">PhoneDB</h3>
-              </div>
-              <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
-                A comprehensive mobile phone database demonstrating proper database normalization and modern web development practices.
-              </p>
-            </div>
-
-            {/* Features Section */}
-            <div className="space-y-4">
-              <h4 className="font-semibold text-gray-900 dark:text-white">Features</h4>
-              <ul className="space-y-2 text-sm">
-                {[
-                  'Advanced Phone Filtering',
-                  'Side-by-Side Comparison',
-                  'SQL Query Visualization',
-                  'Normalized Database Design',
-                  'Responsive Mobile Interface'
-                ].map((feature) => (
-                  <li key={feature} className="flex items-center space-x-2 text-gray-600 dark:text-gray-400">
-                    <svg className="w-4 h-4 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Tech Stack Section */}
-            <div className="space-y-4">
-              <h4 className="font-semibold text-gray-900 dark:text-white">Built With</h4>
-              <div className="flex flex-wrap gap-2">
-                {['Next.js', 'React', 'TypeScript', 'Tailwind CSS', 'MySQL', 'Node.js'].map((tech) => (
-                  <span 
-                    key={tech}
-                    className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full text-xs font-medium"
-                  >
-                    {tech}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-              © 2024 PhoneDB. Built for educational purposes demonstrating database normalization and modern web development.
+      <footer className="border-t border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-3 lg:px-8">
+          <div>
+            <h2 className="font-semibold text-gray-950 dark:text-white">PhoneDB</h2>
+            <p className="mt-3 max-w-sm text-sm leading-6 text-gray-600 dark:text-gray-400">
+              A structured catalogue for researching and comparing mobile phone specifications.
             </p>
           </div>
+          <div>
+            <h2 className="font-semibold text-gray-950 dark:text-white">Explore</h2>
+            <div className="mt-3 flex flex-col gap-2 text-sm text-gray-600 dark:text-gray-400">
+              <Link href="/phones" className="hover:text-primary-600 dark:hover:text-primary-400">Browse phones</Link>
+              <Link href="/compare" className="hover:text-primary-600 dark:hover:text-primary-400">Compare devices</Link>
+            </div>
+          </div>
+          <div>
+            <h2 className="font-semibold text-gray-950 dark:text-white">Technology</h2>
+            <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
+              Next.js, React, TypeScript, Express, and MySQL.
+            </p>
+          </div>
+        </div>
+        <div className="border-t border-gray-200 px-4 py-4 text-center text-xs text-gray-500 dark:border-gray-800 dark:text-gray-500">
+          PhoneDB · Structured device information for informed comparison
         </div>
       </footer>
     </div>

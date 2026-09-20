@@ -1,214 +1,192 @@
-import fs from 'fs';
-import path from 'path';
-import mysql from 'mysql2/promise';
-import dotenv from 'dotenv';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import mysql, { Connection, RowDataPacket } from 'mysql2/promise';
+import { loadConfig, AppConfig } from '../config';
+import { loadEnvironment } from '../env';
+import { log } from '../logger';
 
-dotenv.config();
+loadEnvironment();
 
 interface Migration {
   id: string;
   name: string;
   filePath: string;
+  checksum: string;
 }
 
-class MigrationRunner {
-  private connection: mysql.Connection | null = null;
+interface ExecutedMigration extends RowDataPacket {
+  id: string;
+  name: string;
+  checksum: string | null;
+  executed_at: Date;
+}
+
+function quoteIdentifier(value: string): string {
+  const tick = String.fromCharCode(96);
+  return tick + value.replaceAll(tick, tick + tick) + tick;
+}
+
+export class MigrationRunner {
+  private connection: Connection | null = null;
+
+  constructor(private readonly config: AppConfig = loadConfig()) {}
 
   async connect(): Promise<void> {
-    // First try to connect without specifying database
     try {
       this.connection = await mysql.createConnection({
-        host: process.env.DB_HOST || 'localhost',
-        user: process.env.DB_USER || 'root',
-        password: process.env.DB_PASSWORD || 'bbbb',
-        database: process.env.DB_NAME || 'mobile_specs',
-        multipleStatements: true
+        host: this.config.db.host,
+        port: this.config.db.port,
+        user: this.config.db.user,
+        password: this.config.db.password,
+        multipleStatements: true,
+        ssl: this.config.db.ssl ? { rejectUnauthorized: true } : undefined,
       });
-    } catch (error: any) {
-      // If database doesn't exist, connect without specifying database
-      if (error.code === 'ER_BAD_DB_ERROR') {
-        console.log('Database does not exist, connecting without database...');
-        this.connection = await mysql.createConnection({
-          host: process.env.DB_HOST || 'localhost',
-          user: process.env.DB_USER || 'root',
-          password: process.env.DB_PASSWORD || 'bbbb',
-          multipleStatements: true
-        });
-      } else {
-        throw error;
-      }
+
+      await this.connection.query(
+        'CREATE DATABASE IF NOT EXISTS ' + quoteIdentifier(this.config.db.name) + ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci',
+      );
+      await this.connection.query('USE ' + quoteIdentifier(this.config.db.name));
+    } catch {
+      await this.disconnect();
+      throw new Error('Unable to connect to the configured MySQL server');
     }
-    console.log('Connected to MySQL server');
   }
 
   async disconnect(): Promise<void> {
-    if (this.connection) {
-      await this.connection.end();
-      console.log('Disconnected from MySQL server');
-    }
+    if (!this.connection) return;
+    await this.connection.end();
+    this.connection = null;
+  }
+
+  private getConnection(): Connection {
+    if (!this.connection) throw new Error('Migration runner is not connected');
+    return this.connection;
   }
 
   async createMigrationsTable(): Promise<void> {
-    if (!this.connection) throw new Error('Not connected to database');
-
-    await this.connection.query('CREATE DATABASE IF NOT EXISTS mobile_specs');
-    await this.connection.query('USE mobile_specs');
-    await this.connection.execute(`
+    const connection = this.getConnection();
+    await connection.execute(`
       CREATE TABLE IF NOT EXISTS migrations (
         id VARCHAR(255) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
-        executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        checksum CHAR(64) NULL,
+        executed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log('Migrations table ready');
+
+    const [columns] = await connection.query<RowDataPacket[]>('SHOW COLUMNS FROM migrations LIKE ?', ['checksum']);
+    if (columns.length === 0) {
+      await connection.query('ALTER TABLE migrations ADD COLUMN checksum CHAR(64) NULL AFTER name');
+    }
   }
 
-  async getExecutedMigrations(): Promise<string[]> {
-    if (!this.connection) throw new Error('Not connected to database');
-
-    try {
-      const [rows] = await this.connection.execute('SELECT id FROM migrations ORDER BY executed_at');
-      return (rows as any[]).map(row => row.id);
-    } catch (error) {
-      // If migrations table doesn't exist yet, return empty array
-      return [];
-    }
+  async getExecutedMigrations(): Promise<Map<string, ExecutedMigration>> {
+    const connection = this.getConnection();
+    const [rows] = await connection.execute<ExecutedMigration[]>(
+      'SELECT id, name, checksum, executed_at FROM migrations ORDER BY executed_at, id',
+    );
+    return new Map(rows.map((row) => [row.id, row]));
   }
 
   async getMigrationFiles(): Promise<Migration[]> {
     const migrationsDir = path.join(__dirname, 'migrations');
-    const files = fs.readdirSync(migrationsDir)
-      .filter(file => file.endsWith('.sql'))
+    const files = (await fs.readdir(migrationsDir))
+      .filter((file) => /^\d+_.+\.sql$/i.test(file))
       .sort();
 
-    return files.map(file => ({
-      id: file.replace('.sql', ''),
-      name: file,
-      filePath: path.join(migrationsDir, file)
+    return Promise.all(files.map(async (file) => {
+      const filePath = path.join(migrationsDir, file);
+      const contents = await fs.readFile(filePath);
+      return {
+        id: file.replace(/\.sql$/i, ''),
+        name: file,
+        filePath,
+        checksum: crypto.createHash('sha256').update(contents).digest('hex'),
+      };
     }));
   }
 
-  async executeMigration(migration: Migration): Promise<void> {
-    if (!this.connection) throw new Error('Not connected to database');
-
-    console.log(`Executing migration: ${migration.name}`);
-    
-    const sql = fs.readFileSync(migration.filePath, 'utf8');
-    
-    try {
-      // Split SQL into individual statements and execute them
-      const statements = sql.split(';').filter(stmt => {
-        const trimmed = stmt.trim();
-        return trimmed.length > 0 && !trimmed.startsWith('--');
-      });
-      
-      for (const statement of statements) {
-        const trimmedStatement = statement.trim();
-        if (trimmedStatement && !trimmedStatement.startsWith('--')) {
-          if (trimmedStatement.toUpperCase().startsWith('USE ') || 
-              trimmedStatement.toUpperCase().startsWith('DROP DATABASE') ||
-              trimmedStatement.toUpperCase().startsWith('CREATE DATABASE') ||
-              trimmedStatement.toUpperCase().startsWith('ALTER TABLE')) {
-            await this.connection.query(trimmedStatement);
-          } else {
-            await this.connection.execute(trimmedStatement);
-          }
-        }
-      }
-      
-      // Reconnect to the database after schema creation
-      await this.disconnect();
-      await this.connect();
-      await this.createMigrationsTable();
-      
-      // Record migration as executed
-      await this.connection.execute(
-        'INSERT INTO migrations (id, name) VALUES (?, ?)',
-        [migration.id, migration.name]
-      );
-      
-      console.log(`✅ Migration ${migration.name} executed successfully`);
-    } catch (error) {
-      console.error(`❌ Migration ${migration.name} failed:`, error);
-      throw error;
-    }
+  async status(): Promise<{ applied: string[]; pending: string[] }> {
+    await this.connect();
+    await this.createMigrationsTable();
+    const executed = await this.getExecutedMigrations();
+    const migrations = await this.getMigrationFiles();
+    return {
+      applied: migrations.filter((migration) => executed.has(migration.id)).map((migration) => migration.id),
+      pending: migrations.filter((migration) => !executed.has(migration.id)).map((migration) => migration.id),
+    };
   }
 
   async runMigrations(): Promise<void> {
     await this.connect();
     await this.createMigrationsTable();
-
-    const executedMigrations = await this.getExecutedMigrations();
-    const allMigrations = await this.getMigrationFiles();
-
-    const pendingMigrations = allMigrations.filter(
-      migration => !executedMigrations.includes(migration.id)
+    const connection = this.getConnection();
+    const [lockRows] = await connection.query<RowDataPacket[]>(
+      'SELECT GET_LOCK(?, 30) AS acquired',
+      ['phonedb:migrations'],
     );
-
-    if (pendingMigrations.length === 0) {
-      console.log('No pending migrations');
-      return;
+    if (Number(lockRows[0]?.acquired) !== 1) {
+      throw new Error('Unable to acquire the database migration lock');
     }
 
-    console.log(`Found ${pendingMigrations.length} pending migrations`);
+    try {
+      const executed = await this.getExecutedMigrations();
+      const migrations = await this.getMigrationFiles();
 
-    for (const migration of pendingMigrations) {
-      await this.executeMigration(migration);
+      for (const migration of migrations) {
+        const existing = executed.get(migration.id);
+        if (existing) {
+          if (existing.checksum && existing.checksum !== migration.checksum) {
+            throw new Error('Migration checksum mismatch: ' + migration.name);
+          }
+          continue;
+        }
+
+        log('info', 'Applying database migration', { migration: migration.name });
+        const sql = await fs.readFile(migration.filePath, 'utf8');
+        await connection.query(sql);
+        await connection.execute(
+          'INSERT INTO migrations (id, name, checksum) VALUES (?, ?, ?)',
+          [migration.id, migration.name, migration.checksum],
+        );
+      }
+    } finally {
+      await connection.query('SELECT RELEASE_LOCK(?)', ['phonedb:migrations']);
     }
-
-    console.log('All migrations completed successfully');
   }
 
-  async rollbackLastMigration(): Promise<void> {
-    await this.connect();
-    
-    const executedMigrations = await this.getExecutedMigrations();
-    if (executedMigrations.length === 0) {
-      console.log('No migrations to rollback');
-      return;
-    }
-
-    const lastMigration = executedMigrations[executedMigrations.length - 1];
-    console.log(`Rolling back migration: ${lastMigration}`);
-
-    // For this implementation, we'll just drop and recreate the database
-    // In a production system, you'd want proper rollback scripts
-    await this.connection!.execute('DROP DATABASE IF EXISTS mobile_specs');
-    await this.connection!.execute('DELETE FROM migrations WHERE id = ?', [lastMigration]);
-    
-    console.log(`✅ Rolled back migration: ${lastMigration}`);
+  async rollbackLastMigration(): Promise<never> {
+    throw new Error('Database migrations are forward-only. Create and review a new down migration explicitly instead of deleting the database.');
   }
 }
 
-// CLI interface
-async function main() {
-  const args = process.argv.slice(2);
-  const command = args[0];
-
+async function main(): Promise<void> {
+  const command = process.argv[2] || 'up';
   const runner = new MigrationRunner();
 
   try {
-    switch (command) {
-      case 'up':
-        await runner.runMigrations();
-        break;
-      case 'rollback':
-        await runner.rollbackLastMigration();
-        break;
-      default:
-        console.log('Usage: npm run migrate [up|rollback]');
-        process.exit(1);
+    if (command === 'up') {
+      await runner.runMigrations();
+      log('info', 'Database migrations completed');
+    } else if (command === 'status') {
+      const status = await runner.status();
+      console.log(JSON.stringify(status, null, 2));
+    } else if (command === 'rollback') {
+      await runner.rollbackLastMigration();
+    } else {
+      throw new Error('Usage: npm run migrate -- [up|status]');
     }
-  } catch (error) {
-    console.error('Migration failed:', error);
-    process.exit(1);
   } finally {
     await runner.disconnect();
   }
 }
 
 if (require.main === module) {
-  main();
+  main().catch((error) => {
+    log('error', 'Database migration failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    process.exitCode = 1;
+  });
 }
-
-export { MigrationRunner };

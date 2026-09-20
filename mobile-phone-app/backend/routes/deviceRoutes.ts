@@ -1,59 +1,19 @@
 import express from 'express';
 import { DeviceController } from '../controllers/deviceController';
-import { ValidationError } from '../middleware/errorHandler';
+import { AppConfig } from '../config';
+import { DatabaseConnection } from '../database/connection';
+import { validateJsonContent } from '../middleware/validation';
 
-const router = express.Router();
-const deviceController = new DeviceController();
+export function createDeviceRoutes(db: DatabaseConnection, config: AppConfig): express.Router {
+  const router = express.Router();
+  const controller = new DeviceController(db, config);
 
-// Validation middleware for search requests
-const validateSearchRequest = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const { filters, sortBy, sortOrder, page, limit } = req.body;
-  
-  // Validate pagination parameters
-  if (page !== undefined && (!Number.isInteger(page) || page < 1)) {
-    throw new ValidationError('Page must be a positive integer');
-  }
-  
-  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
-    throw new ValidationError('Limit must be a positive integer between 1 and 100');
-  }
-  
-  // Validate sort parameters
-  if (sortOrder && !['asc', 'desc'].includes(sortOrder.toLowerCase())) {
-    throw new ValidationError('Sort order must be either "asc" or "desc"');
-  }
-  
-  next();
-};
+  router.get('/filters', controller.getFilterOptions);
+  router.post('/search', validateJsonContent, controller.searchPhones);
+  router.get('/', controller.getAllDevices);
+  router.get('/:id', controller.getPhoneDetails);
 
-// Validation middleware for device ID parameter
-const validateDeviceId = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const { id } = req.params;
-  
-  if (!id || id.trim() === '') {
-    throw new ValidationError('Device ID is required');
-  }
-  
-  // Check if ID is a valid integer
-  const deviceId = parseInt(id);
-  if (isNaN(deviceId) || deviceId < 1) {
-    throw new ValidationError('Device ID must be a positive integer');
-  }
-  
-  next();
-};
+  return router;
+}
 
-// Routes without caching middleware
-// GET /api/devices/filters - Get filter options (must be before /:id)
-router.get('/filters', deviceController.getFilterOptions);
-
-// POST /api/devices/search - Search phones with filters
-router.post('/search', validateSearchRequest, deviceController.searchPhones);
-
-// GET /api/devices - Get all devices with pagination
-router.get('/', deviceController.getAllDevices);
-
-// GET /api/devices/:id - Get phone details (must be last)
-router.get('/:id', validateDeviceId, deviceController.getPhoneDetails);
-
-export default router;
+export default createDeviceRoutes;

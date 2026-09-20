@@ -1,111 +1,97 @@
-import mysql from 'mysql2/promise';
-import dotenv from 'dotenv';
+import mysql, { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import { DatabaseConfig } from '../config';
 import { DatabaseConnectionError } from '../middleware/errorHandler';
+import { log } from '../logger';
 
-dotenv.config();
+export type QueryValue = string | number | boolean | null | Date;
 
-export interface QueryResult {
-  results: any;
+export interface QueryResult<T = unknown> {
+  results: T;
   executionTime: number;
   query: string;
-  params?: any[];
+  params: QueryValue[];
 }
 
 export class DatabaseConnection {
-  private pool: mysql.Pool;
-  private isConnected: boolean = false;
+  private readonly pool: mysql.Pool;
+  private connected = false;
 
-  constructor() {
+  constructor(private readonly config: DatabaseConfig) {
     this.pool = mysql.createPool({
-      host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || 'bbbb',
-      database: process.env.DB_NAME || 'mobile_specs',
+      host: config.host,
+      port: config.port,
+      user: config.user,
+      password: config.password,
+      database: config.name,
       waitForConnections: true,
-      connectionLimit: 10,
+      connectionLimit: config.connectionLimit,
       queueLimit: 0,
-      charset: 'utf8mb4'
+      charset: 'utf8mb4',
+      decimalNumbers: true,
+      ssl: config.ssl ? { rejectUnauthorized: true } : undefined,
+      enableKeepAlive: true,
     });
-
-    // Test the connection on initialization
-    this.testConnection();
   }
 
-  private async testConnection(): Promise<void> {
+  async connect(): Promise<void> {
     try {
       const connection = await this.pool.getConnection();
-      console.log('✅ Database connected successfully');
-      console.log(`📊 Database: ${process.env.DB_NAME || 'mobile_specs'}`);
-      console.log(`🏠 Host: ${process.env.DB_HOST || 'localhost'}`);
-      this.isConnected = true;
       connection.release();
-    } catch (error) {
-      console.error('❌ Database connection failed:', error);
-      this.isConnected = false;
-      throw new DatabaseConnectionError('Failed to connect to database');
+      this.connected = true;
+    } catch {
+      this.connected = false;
+      throw new DatabaseConnectionError('Unable to connect to the configured MySQL database');
     }
   }
 
-  // Execute a query with parameters and return detailed results
-  async query(sql: string, params: any[] = []): Promise<QueryResult> {
-    if (!this.isConnected) {
-      await this.testConnection();
-    }
+  async query<T = unknown>(sql: string, params: QueryValue[] = []): Promise<QueryResult<T>> {
+    const startedAt = performance.now();
 
     try {
-      const startTime = Date.now();
       const [results] = await this.pool.execute(sql, params);
-      const executionTime = Date.now() - startTime;
-      
-      // Log query for development
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`🔍 Query executed in ${executionTime}ms: ${sql.substring(0, 100)}${sql.length > 100 ? '...' : ''}`);
-        if (params.length > 0) {
-          console.log(`📝 Parameters:`, params);
-        }
-      }
-      
+      this.connected = true;
       return {
-        results,
-        executionTime,
+        results: results as T,
+        executionTime: Math.round(performance.now() - startedAt),
         query: sql,
-        params: params.length > 0 ? params : undefined
+        params,
       };
     } catch (error) {
-      console.error('❌ Database query error:', {
-        sql: sql.substring(0, 200),
-        params,
-        error: error instanceof Error ? error.message : error
+      this.connected = false;
+      const databaseError = error as { code?: unknown; errno?: unknown; sqlState?: unknown };
+      log('error', 'Database query failed', {
+        errorCode: typeof databaseError.code === 'string' ? databaseError.code : undefined,
+        errno: typeof databaseError.errno === 'number' ? databaseError.errno : undefined,
+        sqlState: typeof databaseError.sqlState === 'string' ? databaseError.sqlState : undefined,
+        durationMs: Math.round(performance.now() - startedAt),
       });
       throw error;
     }
   }
 
-  // Execute a query and return only the results (for simpler usage)
-  async queryResults(sql: string, params: any[] = []): Promise<any> {
-    const result = await this.query(sql, params);
-    return result.results;
+  async queryRows<T extends RowDataPacket = RowDataPacket>(sql: string, params: QueryValue[] = []): Promise<QueryResult<T[]>> {
+    return this.query<T[]>(sql, params);
   }
 
-  // Get a connection from the pool for transactions
-  async getConnection(): Promise<mysql.PoolConnection> {
+  async queryResult(sql: string, params: QueryValue[] = []): Promise<QueryResult<ResultSetHeader>> {
+    return this.query<ResultSetHeader>(sql, params);
+  }
+
+  async getConnection(): Promise<PoolConnection> {
     try {
       return await this.pool.getConnection();
-    } catch (error) {
-      console.error('❌ Failed to get database connection:', error);
-      throw new DatabaseConnectionError('Failed to get database connection');
+    } catch {
+      throw new DatabaseConnectionError('Unable to obtain a database connection');
     }
   }
 
-  // Execute a transaction
-  async transaction<T>(callback: (connection: mysql.PoolConnection) => Promise<T>): Promise<T> {
+  async transaction<T>(callback: (connection: PoolConnection) => Promise<T>): Promise<T> {
     const connection = await this.getConnection();
-    
     try {
       await connection.beginTransaction();
-      const result = await callback(connection);
+      const value = await callback(connection);
       await connection.commit();
-      return result;
+      return value;
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -114,35 +100,24 @@ export class DatabaseConnection {
     }
   }
 
-  // Check if database is connected
   async isHealthy(): Promise<boolean> {
     try {
       await this.query('SELECT 1');
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
 
-  // Get connection pool stats
-  getPoolStats() {
+  getPoolStats(): { connectionLimit: number; connected: boolean } {
     return {
-      totalConnections: this.pool.pool.config.connectionLimit,
-      activeConnections: this.pool.pool._allConnections.length,
-      freeConnections: this.pool.pool._freeConnections.length,
-      queuedRequests: this.pool.pool._connectionQueue.length
+      connectionLimit: this.config.connectionLimit,
+      connected: this.connected,
     };
   }
 
-  // Close the connection pool
   async close(): Promise<void> {
-    try {
-      await this.pool.end();
-      this.isConnected = false;
-      console.log('🔌 Database connection pool closed');
-    } catch (error) {
-      console.error('❌ Error closing database connection pool:', error);
-      throw error;
-    }
+    await this.pool.end();
+    this.connected = false;
   }
 }

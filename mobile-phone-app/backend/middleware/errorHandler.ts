@@ -1,127 +1,28 @@
 import { Request, Response, NextFunction } from 'express';
+import { log } from '../logger';
 
-interface APIError extends Error {
-  status?: number;
-  code?: string;
-  details?: any;
-}
-
-interface DatabaseError extends Error {
+export interface DatabaseErrorLike extends Error {
   errno?: number;
   sqlState?: string;
   sqlMessage?: string;
+  code?: string;
 }
 
-export const errorHandler = (
-  error: APIError | DatabaseError,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  console.error('Error occurred:', {
-    message: error.message,
-    stack: error.stack,
-    url: req.url,
-    method: req.method,
-    timestamp: new Date().toISOString()
-  });
-
-  // Handle different types of errors
-  let status = 500;
-  let code = 'INTERNAL_ERROR';
-  let message = 'Internal Server Error';
-  let details = undefined;
-
-  // Database errors
-  if ('errno' in error) {
-    const dbError = error as DatabaseError;
-    switch (dbError.errno) {
-      case 1062: // Duplicate entry
-        status = 409;
-        code = 'DUPLICATE_ENTRY';
-        message = 'Duplicate entry found';
-        break;
-      case 1452: // Foreign key constraint
-        status = 400;
-        code = 'FOREIGN_KEY_CONSTRAINT';
-        message = 'Foreign key constraint violation';
-        break;
-      case 1054: // Unknown column
-        status = 400;
-        code = 'INVALID_COLUMN';
-        message = 'Invalid column in query';
-        break;
-      case 1146: // Table doesn't exist
-        status = 500;
-        code = 'TABLE_NOT_FOUND';
-        message = 'Database table not found';
-        break;
-      default:
-        status = 500;
-        code = 'DATABASE_ERROR';
-        message = 'Database operation failed';
-        details = process.env.NODE_ENV === 'development' ? dbError.sqlMessage : undefined;
-    }
-  }
-  // API errors with custom status
-  else if ('status' in error && error.status) {
-    status = error.status;
-    code = error.code || 'API_ERROR';
-    message = error.message;
-    details = error.details;
-  }
-  // Validation errors
-  else if (error.name === 'ValidationError') {
-    status = 400;
-    code = 'VALIDATION_ERROR';
-    message = error.message;
-  }
-  // JSON parsing errors
-  else if (error.name === 'SyntaxError' && 'body' in error) {
-    status = 400;
-    code = 'INVALID_JSON';
-    message = 'Invalid JSON in request body';
-  }
-  // Default error handling
-  else {
-    status = (error as APIError).status || 500;
-    code = (error as APIError).code || 'INTERNAL_ERROR';
-    message = error.message || 'Internal Server Error';
-  }
-
-  // Send error response
-  const errorResponse = {
-    success: false,
-    error: {
-      code,
-      message,
-      status,
-      ...(details && { details }),
-      ...(process.env.NODE_ENV === 'development' && { 
-        stack: error.stack,
-        timestamp: new Date().toISOString()
-      })
-    }
-  };
-
-  res.status(status).json(errorResponse);
-};
-
-// Custom error classes for better error handling
 export class APIError extends Error {
   constructor(
     message: string,
-    public status: number = 500,
-    public code: string = 'API_ERROR',
-    public details?: any
+    public readonly status = 500,
+    public readonly code = 'API_ERROR',
+    public readonly details?: unknown,
   ) {
     super(message);
     this.name = 'APIError';
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
 export class ValidationError extends APIError {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: unknown) {
     super(message, 400, 'VALIDATION_ERROR', details);
     this.name = 'ValidationError';
   }
@@ -129,14 +30,79 @@ export class ValidationError extends APIError {
 
 export class NotFoundError extends APIError {
   constructor(resource: string) {
-    super(`${resource} not found`, 404, 'NOT_FOUND');
+    super(resource + ' not found', 404, 'NOT_FOUND');
     this.name = 'NotFoundError';
   }
 }
 
 export class DatabaseConnectionError extends APIError {
-  constructor(message: string = 'Database connection failed') {
+  constructor(message = 'Database connection failed') {
     super(message, 503, 'DATABASE_CONNECTION_ERROR');
     this.name = 'DatabaseConnectionError';
   }
+}
+
+function isDatabaseError(error: unknown): error is DatabaseErrorLike {
+  return Boolean(error && typeof error === 'object' && 'errno' in error);
+}
+
+function isAPIError(error: unknown): error is APIError {
+  return error instanceof APIError;
+}
+
+function databaseErrorResponse(error: DatabaseErrorLike): Pick<APIError, 'status' | 'code' | 'message'> {
+  switch (error.errno) {
+    case 1062:
+      return { status: 409, code: 'DUPLICATE_ENTRY', message: 'The requested record already exists' };
+    case 1452:
+      return { status: 400, code: 'FOREIGN_KEY_CONSTRAINT', message: 'The request references an unavailable record' };
+    case 1054:
+      return { status: 500, code: 'DATABASE_SCHEMA_ERROR', message: 'The database schema is not compatible with this service' };
+    case 1146:
+      return { status: 503, code: 'DATABASE_NOT_READY', message: 'The database schema is not ready' };
+    default:
+      return { status: 503, code: 'DATABASE_ERROR', message: 'The database operation could not be completed' };
+  }
+}
+
+export function errorHandler(error: unknown, req: Request, res: Response, _next: NextFunction): void {
+  const requestId = String(res.locals.requestId || 'unknown');
+  log('error', 'Request failed', {
+    requestId,
+    method: req.method,
+    path: req.originalUrl,
+    errorType: error instanceof Error ? error.name : 'UnknownError',
+    errorMessage: isDatabaseError(error) ? 'database operation failed' : error instanceof Error ? error.message : 'unknown error',
+  });
+
+  let status = 500;
+  let code = 'INTERNAL_ERROR';
+  let message = 'Internal Server Error';
+  let details: unknown;
+
+  if (isDatabaseError(error)) {
+    ({ status, code, message } = databaseErrorResponse(error));
+  } else if (isAPIError(error)) {
+    ({ status, code, message, details } = error);
+  } else if (error instanceof SyntaxError && 'body' in error) {
+    status = 400;
+    code = 'INVALID_JSON';
+    message = 'Invalid JSON in request body';
+  }
+
+  const response: {
+    success: false;
+    error: { code: string; message: string; status: number; details?: unknown };
+    requestId: string;
+  } = {
+    success: false,
+    error: { code, message, status },
+    requestId,
+  };
+
+  if (process.env.NODE_ENV !== 'production' && details !== undefined) {
+    response.error.details = details;
+  }
+
+  res.status(status).json(response);
 }

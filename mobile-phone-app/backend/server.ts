@@ -1,187 +1,179 @@
-import express from 'express';
+import express, { Express } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import deviceRoutes from './routes/deviceRoutes';
+import { Server } from 'node:http';
+import { AppConfig, loadConfig } from './config';
+import { loadEnvironment } from './env';
+import { DatabaseConnection } from './database/connection';
+import createDeviceRoutes from './routes/deviceRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { apiLogger } from './middleware/logging';
-import { sanitizeInput } from './middleware/validation';
-import { DatabaseConnection } from './database/connection';
+import { log } from './logger';
 
-// Load environment variables
-dotenv.config();
+loadEnvironment();
 
-const app = express();
-const PORT = process.env.PORT || 3001;
+export interface AppDependencies {
+  config: AppConfig;
+  db: DatabaseConnection;
+}
 
-// Initialize database connection
-const db = new DatabaseConnection();
+function securityHeaders(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+  next();
+}
 
-// Trust proxy for accurate IP addresses
-app.set('trust proxy', 1);
+function responseMeta(res: express.Response) {
+  return { requestId: String(res.locals.requestId || 'unknown') };
+}
 
-// Security and CORS middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+export function createApp({ config, db }: AppDependencies): Express {
+  const app = express();
+  app.set('trust proxy', config.trustProxy);
 
-// Body parsing middleware
-app.use(express.json({ 
-  limit: '10mb',
-  type: 'application/json'
-}));
-app.use(express.urlencoded({ 
-  extended: true,
-  limit: '10mb'
-}));
-
-// Security middleware
-app.use(sanitizeInput);
-
-// Logging middleware
-app.use(apiLogger);
-
-// Routes
-app.use('/api/devices', deviceRoutes);
-
-// Root endpoint
-app.get('/', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Mobile Phone Recommendation API',
-    version: '1.0.0',
-    endpoints: {
-      health: '/health',
-      devices: '/api/devices',
-      filters: '/api/devices/filters',
-      search: '/api/devices/search'
+  app.use(securityHeaders);
+  app.use(apiLogger);
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (!origin || config.frontendOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Origin is not allowed by the API'));
     },
-    timestamp: new Date().toISOString()
-  });
-});
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+    exposedHeaders: ['X-Request-ID', 'Retry-After'],
+  }));
+  app.use(express.json({ limit: config.bodyLimit, type: 'application/json' }));
+  app.use(express.urlencoded({ extended: false, limit: config.bodyLimit }));
 
-// Health check endpoint with detailed status
-app.get('/health', async (req, res) => {
-  try {
-    const startTime = Date.now();
-    
-    // Test database connection
-    await db.query('SELECT 1');
-    const dbResponseTime = Date.now() - startTime;
-    
-    // Get database pool stats
-    const poolStats = db.getPoolStats();
-    
-    res.json({ 
+  app.use('/api/devices', createDeviceRoutes(db, config));
+
+  app.get('/', (_req, res) => {
+    res.json({
       success: true,
-      status: 'OK', 
-      message: 'Server is running',
+      service: 'PhoneDB API',
+      version: '1.0.0',
+      endpoints: {
+        health: '/health/ready',
+        devices: '/api/devices',
+        filters: '/api/devices/filters',
+        search: '/api/devices/search',
+      },
+      meta: responseMeta(res),
+    });
+  });
+
+  app.get('/health/live', (_req, res) => {
+    res.status(200).json({
+      success: true,
+      status: 'ok',
+      service: 'PhoneDB API',
+      meta: responseMeta(res),
+    });
+  });
+
+  app.get('/health/ready', async (_req, res) => {
+    const databaseReady = await db.isHealthy();
+    res.status(databaseReady ? 200 : 503).json({
+      success: databaseReady,
+      status: databaseReady ? 'ready' : 'not_ready',
+      services: { database: databaseReady ? 'ready' : 'unavailable' },
+      meta: responseMeta(res),
+    });
+  });
+
+  app.get('/health', async (_req, res) => {
+    const databaseReady = await db.isHealthy();
+    res.status(databaseReady ? 200 : 503).json({
+      success: databaseReady,
+      status: databaseReady ? 'ok' : 'degraded',
       services: {
         database: {
-          status: 'Connected',
-          responseTime: `${dbResponseTime}ms`,
-          pool: poolStats
+          status: databaseReady ? 'connected' : 'unavailable',
+          pool: db.getPoolStats(),
         },
-        server: {
-          status: 'Running',
-          uptime: process.uptime(),
-          memory: process.memoryUsage(),
-          nodeVersion: process.version
-        }
       },
-      timestamp: new Date().toISOString()
+      meta: responseMeta(res),
     });
-  } catch (error) {
-    res.status(503).json({ 
+  });
+
+  app.get('/api', (_req, res) => {
+    res.json({
+      success: true,
+      service: 'PhoneDB API',
+      version: '1.0.0',
+      endpoints: {
+        'GET /api/devices': 'Get devices with pagination',
+        'GET /api/devices/filters': 'Get available filter options',
+        'POST /api/devices/search': 'Search devices with filters',
+        'GET /api/devices/:id': 'Get device details by ID',
+      },
+      meta: responseMeta(res),
+    });
+  });
+
+  app.use((_req, res) => {
+    res.status(404).json({
       success: false,
-      status: 'ERROR', 
-      message: 'Database connection failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      error: {
+        code: 'ROUTE_NOT_FOUND',
+        message: 'The requested API route does not exist',
+        status: 404,
+      },
+      ...responseMeta(res),
     });
-  }
-});
-
-// API info endpoint
-app.get('/api', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Mobile Phone Recommendation API',
-    version: '1.0.0',
-    endpoints: {
-      'GET /api/devices': 'Get all devices with pagination',
-      'GET /api/devices/filters': 'Get filter options',
-      'POST /api/devices/search': 'Search devices with filters',
-      'GET /api/devices/:id': 'Get device details by ID'
-    },
-    timestamp: new Date().toISOString()
   });
-});
 
-// 404 handler for undefined routes
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: {
-      code: 'ROUTE_NOT_FOUND',
-      message: `Route ${req.method} ${req.originalUrl} not found`,
-      status: 404,
-      availableEndpoints: [
-        'GET /',
-        'GET /health',
-        'GET /api',
-        'GET /api/devices',
-        'GET /api/devices/filters',
-        'POST /api/devices/search',
-        'GET /api/devices/:id'
-      ]
-    },
-    timestamp: new Date().toISOString()
+  app.use(errorHandler);
+  return app;
+}
+
+export async function startServer(): Promise<{ app: Express; server: Server; db: DatabaseConnection }> {
+  const config = loadConfig();
+  const db = new DatabaseConnection(config.db);
+  await db.connect();
+  const app = createApp({ config, db });
+  const server = app.listen(config.port, () => {
+    log('info', 'PhoneDB API started', {
+      port: config.port,
+      environment: config.env,
+      frontendOrigins: config.frontendOrigins,
+    });
   });
-});
 
-// Error handling middleware (must be last)
-app.use(errorHandler);
+  return { app, server, db };
+}
 
-// Graceful shutdown handlers
-const gracefulShutdown = async (signal: string) => {
-  console.log(`\n${signal} received, shutting down gracefully...`);
-  
-  try {
-    await db.close();
-    console.log('✅ Database connections closed');
-    console.log('👋 Server shutdown complete');
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Error during shutdown:', error);
-    process.exit(1);
-  }
-};
+async function main(): Promise<void> {
+  const runtime = await startServer();
+  let shuttingDown = false;
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log('info', 'Shutdown requested', { signal });
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  gracefulShutdown('UNCAUGHT_EXCEPTION');
-});
+    await new Promise<void>((resolve) => runtime.server.close(() => resolve()));
+    await runtime.db.close();
+    log('info', 'PhoneDB API stopped');
+  };
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-  gracefulShutdown('UNHANDLED_REJECTION');
-});
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
+  process.once('SIGINT', () => void shutdown('SIGINT'));
+}
 
-app.listen(PORT, () => {
-  console.log('🚀 Mobile Phone Recommendation API Server Started');
-  console.log(`📡 Server running on port ${PORT}`);
-  console.log(`🏠 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`🔗 API endpoints: http://localhost:${PORT}/api`);
-  console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
-  console.log('✅ Server initialization complete\n');
-});
+if (require.main === module) {
+  main().catch((error) => {
+    log('error', 'PhoneDB API failed to start', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    process.exitCode = 1;
+  });
+}
 
-export default app;
+export default createApp;

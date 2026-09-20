@@ -1,9 +1,6 @@
--- Mobile Specs Database - Normalized Schema (3NF/BCNF)
+-- PhoneDB catalogue schema
 -- Migration: 001_create_schema
 -- Description: Create normalized database schema with all tables and indexes
-
--- Use the existing database
-USE mobile_specs;
 
 -- 1. Brands table (eliminates brand redundancy)
 CREATE TABLE brands (

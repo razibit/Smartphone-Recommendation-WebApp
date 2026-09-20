@@ -1,44 +1,25 @@
-import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { AppLayout } from "@/components/Layout";
-import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import type { Metadata, Viewport } from 'next';
+import { AppLayout } from '@/components/Layout';
+import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: "PhoneDB - Mobile Phone Database",
-    template: "%s | PhoneDB"
+    default: 'PhoneDB | Mobile phone specifications',
+    template: '%s | PhoneDB',
   },
-  description: "A comprehensive mobile phone database demonstrating proper database normalization and modern web development practices. Browse, filter, and compare thousands of mobile phones.",
-  keywords: ["mobile phones", "database", "normalization", "comparison", "specifications", "phones", "DBMS", "3NF", "BCNF"],
-  authors: [{ name: "PhoneDB Team" }],
-  creator: "PhoneDB",
+  description: 'Search, inspect, and compare mobile phone specifications from a structured MySQL-backed catalogue.',
+  keywords: ['mobile phones', 'phone specifications', 'phone comparison', 'device catalogue'],
+  applicationName: 'PhoneDB',
+  authors: [{ name: 'PhoneDB maintainers' }],
+  creator: 'PhoneDB',
   openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: "/",
-    title: "PhoneDB - Mobile Phone Database",
-    description: "Browse, filter, and compare thousands of mobile phones with our comprehensive database.",
-    siteName: "PhoneDB",
+    type: 'website',
+    locale: 'en_US',
+    title: 'PhoneDB | Mobile phone specifications',
+    description: 'Search and compare mobile phone specifications.',
+    siteName: 'PhoneDB',
   },
-  twitter: {
-    card: "summary_large_image",
-    title: "PhoneDB - Mobile Phone Database",
-    description: "Browse, filter, and compare thousands of mobile phones with our comprehensive database.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
+  robots: { index: true, follow: true },
 };
 
 export const viewport: Viewport = {
@@ -48,24 +29,15 @@ export const viewport: Viewport = {
   userScalable: true,
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#1f2937' },
+    { media: '(prefers-color-scheme: dark)', color: '#111827' },
   ],
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="scroll-smooth" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans`}
-        suppressHydrationWarning
-      >
-        <AppLayout>
-          {children}
-        </AppLayout>
+    <html lang="en" className="scroll-smooth">
+      <body className="antialiased">
+        <AppLayout>{children}</AppLayout>
       </body>
     </html>
   );

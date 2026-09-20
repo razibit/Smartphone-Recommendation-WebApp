@@ -2,8 +2,6 @@
 -- Description: Fix column ranges and data types for out-of-range values
 -- Date: 2025-08-01
 
-USE mobile_specs;
-
 -- Fix display specifications columns for range issues
 ALTER TABLE display_specifications MODIFY COLUMN screen_size DECIMAL(4,2);
 ALTER TABLE display_specifications MODIFY COLUMN screen_to_body_ratio DECIMAL(5,2);

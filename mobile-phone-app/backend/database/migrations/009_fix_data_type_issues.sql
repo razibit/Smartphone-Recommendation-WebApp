@@ -2,10 +2,8 @@
 -- Description: Fix data type issues for battery_capacity, screen_size, and notch
 -- Date: 2025-08-01
 
-USE mobile_specs;
-
 -- Drop indexes that will conflict with data type changes
-DROP INDEX IF EXISTS idx_display_specs_size ON display_specifications;
+DROP INDEX idx_display_specs_size ON display_specifications;
 
 -- Fix battery_capacity to handle non-numeric data
 ALTER TABLE phone_specifications MODIFY COLUMN battery_capacity VARCHAR(50);

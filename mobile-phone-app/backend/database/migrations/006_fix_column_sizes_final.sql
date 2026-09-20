@@ -2,11 +2,6 @@
 -- Description: Final fix for column sizes and index issues
 -- Date: 2025-08-01
 
-USE mobile_specs;
-
--- Drop problematic indexes first
-DROP INDEX IF EXISTS idx_display_resolution ON display_specifications;
-
 -- Fix display_specifications columns
 ALTER TABLE display_specifications MODIFY COLUMN resolution VARCHAR(800);
 ALTER TABLE display_specifications MODIFY COLUMN touch_screen VARCHAR(100);

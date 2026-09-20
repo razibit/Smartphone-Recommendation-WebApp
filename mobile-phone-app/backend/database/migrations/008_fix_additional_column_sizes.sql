@@ -2,8 +2,6 @@
 -- Description: Fix additional column size issues found during data seeding
 -- Date: 2025-08-01
 
-USE mobile_specs;
-
 -- Fix operating_systems table
 ALTER TABLE operating_systems MODIFY COLUMN os_version VARCHAR(150);
 

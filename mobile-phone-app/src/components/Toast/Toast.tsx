@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -26,6 +26,11 @@ const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
 
+  const handleClose = useCallback(() => {
+    setIsExiting(true);
+    setTimeout(() => onClose(toast.id), 300);
+  }, [onClose, toast.id]);
+
   useEffect(() => {
     // Trigger entrance animation
     const timer = setTimeout(() => setIsVisible(true), 50);
@@ -39,12 +44,7 @@ const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
       clearTimeout(timer);
       clearTimeout(closeTimer);
     };
-  }, [toast.duration]);
-
-  const handleClose = () => {
-    setIsExiting(true);
-    setTimeout(() => onClose(toast.id), 300);
-  };
+  }, [handleClose, toast.duration]);
 
   const getToastStyles = () => {
     const baseStyles = "relative flex items-start p-4 rounded-lg shadow-lg border transition-all duration-300 transform";
@@ -107,6 +107,8 @@ const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
         <p className="text-sm opacity-90 mt-1">{toast.message}</p>
       </div>
       <button
+        type="button"
+        aria-label="Dismiss notification"
         onClick={handleClose}
         className="ml-4 flex-shrink-0 p-1 rounded-md hover:bg-black hover:bg-opacity-10 dark:hover:bg-white dark:hover:bg-opacity-10 transition-colors duration-200"
       >

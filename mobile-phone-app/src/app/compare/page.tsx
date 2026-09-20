@@ -1,184 +1,144 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { PhoneDetails } from '@/components/PhoneComparison';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import PhoneComparison from '@/components/PhoneComparison';
 import { ToastContainer } from '@/components/Toast';
 import { useToast } from '@/hooks/useToast';
-import { apiClient } from '@/lib/api/client';
-import { DynamicComponents } from '@/lib/dynamicImports';
+import { apiClient, DetailedPhone } from '@/lib/api/client';
 
-// Use dynamic import for better performance
-const { PhoneComparison } = DynamicComponents;
-
-export default function ComparePage() {
+function CompareContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const [phones, setPhones] = useState<PhoneDetails[]>([]);
+  const { toasts, removeToast, error: showError, info } = useToast();
+  const requestSequence = useRef(0);
+  const [phones, setPhones] = useState<DetailedPhone[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const toast = useToast();
 
-  // Get phone IDs from URL parameters
   const phoneIdsParam = searchParams.get('phones');
-  const phoneIds = phoneIdsParam ? phoneIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) : [];
+  const phoneIds = Array.from(new Set(
+    (phoneIdsParam || '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => /^\d+$/.test(value))
+      .map(Number)
+      .filter((value) => value > 0),
+  )).slice(0, 4);
+  const phoneIdsKey = phoneIds.join(',');
 
-  // Fetch phone details
   useEffect(() => {
-    if (phoneIds.length === 0) {
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+    const requestedPhoneIds = phoneIdsKey
+      ? phoneIdsKey.split(',').map(Number)
+      : [];
+
+    if (requestedPhoneIds.length === 0) {
       setPhones([]);
+      setError(null);
+      setLoading(false);
       return;
     }
 
-    const fetchPhoneDetails = async () => {
-      setLoading(true);
-      setError(null);
-      
-      try {
-        const phonePromises = phoneIds.map(async (phoneId) => {
-          const response = await apiClient.getPhoneDetails(phoneId);
-          if (response.success && response.data?.phone) {
-            return response.data.phone;
-          }
-          return null;
-        });
+    setLoading(true);
+    setError(null);
 
-        const phoneResults = await Promise.all(phonePromises);
-        const validPhones = phoneResults.filter((phone): phone is PhoneDetails => phone !== null);
-        
+    Promise.all(requestedPhoneIds.map((phoneId) => apiClient.getPhoneDetails(phoneId)))
+      .then((responses) => {
+        if (sequence !== requestSequence.current) return;
+        const validPhones = responses
+          .filter((response) => response.success && response.data?.phone)
+          .map((response) => response.data!.phone);
+        const unavailableResponses = responses.filter((response) => !response.success);
+
         if (validPhones.length === 0) {
-          setError('No valid phones found with the provided IDs.');
-          toast.error(
-            'No Phones Found',
-            'The specified phone IDs could not be found in the database.',
-            5000
-          );
-        } else {
-          setPhones(validPhones);
-          toast.success(
-            'Comparison Loaded',
-            `Successfully loaded ${validPhones.length} phone${validPhones.length !== 1 ? 's' : ''} for comparison`,
-            3000
-          );
+          setPhones([]);
+          if (unavailableResponses.length === responses.length) {
+            setError('The API service is unavailable. Check the connection and try again.');
+            showError('Loading failed', 'The comparison service could not be reached.', 5000);
+          } else {
+            setError('No matching phone records were found.');
+            showError('No phones found', 'The selected device IDs are not available.', 5000);
+          }
+          return;
         }
-      } catch (err) {
-        console.error('Error fetching phone details:', err);
-        setError('Failed to load phone details. Please try again.');
-        
-        toast.error(
-          'Loading Failed',
-          'Failed to load phone details. Please check your connection and try again.',
-          7000
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
 
-    fetchPhoneDetails();
-  }, [phoneIdsParam]);
+        setPhones(validPhones);
+        if (validPhones.length !== requestedPhoneIds.length) {
+          setError('Some selected devices could not be loaded and were omitted.');
+        }
+      })
+      .catch(() => {
+        if (sequence !== requestSequence.current) return;
+        setPhones([]);
+        setError('The comparison could not be loaded. Check the API connection and try again.');
+        showError('Loading failed', 'The comparison service did not return the selected devices.', 7000);
+      })
+      .finally(() => {
+        if (sequence === requestSequence.current) setLoading(false);
+      });
+  }, [phoneIdsKey, showError]);
+
+  const updateSelection = (nextPhones: DetailedPhone[]) => {
+    const query = nextPhones.length > 0
+      ? '/compare?phones=' + nextPhones.map((phone) => phone.phone_id).join(',')
+      : '/compare';
+    router.replace(query);
+  };
 
   const handleRemovePhone = (phoneId: number) => {
-    const phoneToRemove = phones.find(phone => phone.phone_id === phoneId);
-    const updatedPhones = phones.filter(phone => phone.phone_id !== phoneId);
-    setPhones(updatedPhones);
-    
-    // Update URL
-    if (updatedPhones.length > 0) {
-      const newPhoneIds = updatedPhones.map(phone => phone.phone_id).join(',');
-      window.history.replaceState({}, '', `/compare?phones=${newPhoneIds}`);
-    } else {
-      window.history.replaceState({}, '', '/compare');
-    }
-
-    // Show feedback
-    if (phoneToRemove) {
-      toast.info(
-        'Phone Removed',
-        `${phoneToRemove.brand_name} ${phoneToRemove.model} removed from comparison`,
-        3000
-      );
-    }
+    const removed = phones.find((phone) => phone.phone_id === phoneId);
+    updateSelection(phones.filter((phone) => phone.phone_id !== phoneId));
+    if (removed) info('Phone removed', removed.brand_name + ' ' + removed.model + ' was removed.', 3000);
   };
 
   const handleClearAll = () => {
-    const phoneCount = phones.length;
-    setPhones([]);
-    window.history.replaceState({}, '', '/compare');
-    
-    toast.info(
-      'Comparison Cleared',
-      `Removed ${phoneCount} phone${phoneCount !== 1 ? 's' : ''} from comparison`,
-      3000
-    );
+    updateSelection([]);
+    info('Comparison cleared', 'All selected devices were removed.', 3000);
   };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Page Header */}
-        <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4">
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-0">
-              Compare Mobile Phones
-            </h1>
-            
-            {phones.length > 0 && (
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={handleClearAll}
-                  className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-medium transition-colors duration-200 text-sm"
-                >
-                  Clear All
-                </button>
-                <a
-                  href="/phones"
-                  className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200 text-sm inline-flex items-center"
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Add More Phones
-                </a>
-              </div>
-            )}
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <header className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary-700 dark:text-primary-300">Decision workspace</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-gray-950 dark:text-white md:text-4xl">Compare mobile phones</h1>
+            <p className="mt-3 max-w-3xl text-lg text-gray-600 dark:text-gray-400">
+              Review selected devices side by side. Differences are highlighted across the core specifications.
+            </p>
           </div>
-          
-          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-3xl">
-            Compare multiple mobile phones side-by-side to make informed decisions. 
-            Key differences are highlighted to help you spot important variations.
-          </p>
-        </div>
-
-        {/* Error State */}
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 mb-8">
-            <div className="flex items-center">
-              <svg className="w-5 h-5 text-red-600 dark:text-red-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div>
-                <h3 className="font-semibold text-red-900 dark:text-red-100 mb-1">Error Loading Phones</h3>
-                <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
-              </div>
+          {phones.length > 0 && (
+            <div className="flex gap-2">
+              <button type="button" onClick={handleClearAll} className="rounded-lg px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20">
+                Clear all
+              </button>
+              <Link href="/phones" className="rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-700">
+                Add phones
+              </Link>
             </div>
+          )}
+        </header>
+
+        {error && (
+          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200" role="status">
+            {error}
           </div>
         )}
 
-        {/* Phone Comparison */}
-        <div className="mb-8">
-          <PhoneComparison
-            phones={phones}
-            onRemovePhone={handleRemovePhone}
-            loading={loading}
-          />
-        </div>
-        {/* Toast Notifications */}
-        <ToastContainer
-          toasts={toast.toasts}
-          onClose={toast.removeToast}
-        />
+        <PhoneComparison phones={phones} onRemovePhone={handleRemovePhone} loading={loading} />
+        <ToastContainer toasts={toasts} onClose={removeToast} />
       </div>
     </div>
+  );
+}
+
+export default function ComparePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 dark:bg-gray-900" />}>
+      <CompareContent />
+    </Suspense>
   );
 }

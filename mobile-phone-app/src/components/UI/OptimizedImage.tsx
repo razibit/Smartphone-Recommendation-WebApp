@@ -31,6 +31,12 @@ export default function OptimizedImage({
 
   // Intersection Observer for lazy loading
   useEffect(() => {
+    setIsLoaded(false);
+    setHasError(false);
+    setIsInView(priority);
+  }, [src, priority]);
+
+  useEffect(() => {
     if (!containerRef.current || priority) return;
 
     const observer = new IntersectionObserver(
@@ -60,8 +66,11 @@ export default function OptimizedImage({
 
   const handleError = () => {
     setHasError(true);
+    setIsLoaded(false);
     onError?.();
   };
+
+  const isSafeSource = Boolean(src && (src.startsWith('/') || /^https:\/\//i.test(src)));
 
   const defaultFallbackIcon = (
     <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -79,7 +88,7 @@ export default function OptimizedImage({
       )}
 
       {/* Error/fallback state */}
-      {(hasError || !src) && (
+      {(hasError || !isSafeSource) && (
         <div className="absolute inset-0 bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
           <div className="text-center">
             {fallbackIcon || defaultFallbackIcon}
@@ -89,7 +98,7 @@ export default function OptimizedImage({
       )}
 
       {/* Actual image */}
-      {src && isInView && !hasError && (
+      {isSafeSource && src && isInView && !hasError && (
         <img
           ref={imgRef}
           src={src}

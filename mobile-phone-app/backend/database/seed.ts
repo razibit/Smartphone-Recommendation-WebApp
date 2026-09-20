@@ -1,28 +1,34 @@
-import path from 'path';
+import path from 'node:path';
+import { loadConfig } from '../config';
 import { CSVSeeder } from './seeders/csvSeeder';
+import { log } from '../logger';
+import { loadEnvironment } from '../env';
 
-async function main() {
-  const args = process.argv.slice(2);
-  const csvFilePath = args[0] || path.join(__dirname, '../../../phones_data_20250729_181901.csv');
-  const limit = args[1] ? parseInt(args[1]) : undefined;
+loadEnvironment();
 
-  console.log('Starting database seeding...');
-  console.log(`CSV file: ${csvFilePath}`);
-  if (limit) console.log(`Limiting to ${limit} records`);
+async function main(): Promise<void> {
+  const config = loadConfig();
+  const csvFilePath = path.resolve(process.argv[2] || config.seedFile);
+  const rawLimit = process.argv[3];
+  const limit = rawLimit === undefined ? undefined : Number(rawLimit);
 
-  const seeder = new CSVSeeder();
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+    throw new Error('Seed limit must be a positive integer');
+  }
 
+  const seeder = new CSVSeeder(config);
   try {
     await seeder.seedFromCSV(csvFilePath, limit);
-    console.log('✅ Database seeding completed successfully');
-  } catch (error) {
-    console.error('❌ Database seeding failed:', error);
-    process.exit(1);
   } finally {
     await seeder.close();
   }
 }
 
 if (require.main === module) {
-  main();
+  main().catch((error) => {
+    log('error', 'Database seed failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    process.exitCode = 1;
+  });
 }

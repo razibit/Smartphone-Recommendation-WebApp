@@ -1,8 +1,6 @@
 -- Migration: 002_fix_column_sizes
 -- Description: Fix column sizes for data that's too long
 
-USE mobile_specs;
-
 -- Fix resolution column size (increased to handle longer data)
 ALTER TABLE display_specifications MODIFY COLUMN resolution VARCHAR(800);
 
@@ -29,7 +27,9 @@ ALTER TABLE phone_specifications MODIFY COLUMN usb VARCHAR(200);
 ALTER TABLE phone_specifications MODIFY COLUMN quick_charging VARCHAR(200);
 
 -- Fix display specifications precision issues
+DROP INDEX idx_display_specs_size ON display_specifications;
 ALTER TABLE display_specifications MODIFY COLUMN screen_size DECIMAL(4,2);
+CREATE INDEX idx_display_specs_size ON display_specifications(screen_size);
 ALTER TABLE display_specifications MODIFY COLUMN screen_to_body_ratio DECIMAL(5,2);
 
 -- Fix physical specifications weight column (should be VARCHAR, not DECIMAL)

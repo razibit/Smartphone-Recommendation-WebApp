@@ -1,16 +1,25 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import nextConfig from 'eslint-config-next/core-web-vitals';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
-const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+const projectConfig = [
+  ...nextConfig,
+  {
+    ignores: [
+      '.next/**',
+      'out/**',
+      'build/**',
+      'coverage/**',
+      'output/**',
+      'next-env.d.ts',
+    ],
+    rules: {
+      // These effects subscribe to browser/API state and intentionally update
+      // their local view when the external source changes.
+      'react-hooks/set-state-in-effect': 'off',
+      // The image component intentionally uses a controlled native image
+      // element for arbitrary catalogue URLs and its own lazy-loading fallback.
+      '@next/next/no-img-element': 'off',
+    },
+  },
 ];
 
-export default eslintConfig;
+export default projectConfig;

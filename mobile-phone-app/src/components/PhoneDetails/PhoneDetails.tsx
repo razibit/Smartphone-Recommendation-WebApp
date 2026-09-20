@@ -1,115 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '@/lib/api/client';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { apiClient, DetailedPhone } from '@/lib/api/client';
 import { ModalSQLPopup } from '@/components/SQLQueryBox';
 
 interface PhoneDetailsProps {
   phoneId: number | null;
   isOpen: boolean;
   onClose: () => void;
-}
-
-interface DetailedPhone {
-  phone_id: number;
-  model: string;
-  device_type: string;
-  release_date?: string;
-  status: string;
-  detail_url?: string;
-  image_url?: string;
-  scraped_at?: string;
-  
-  // Brand information
-  brand_name: string;
-  
-  // Specifications
-  cpu?: string;
-  cpu_cores?: number;
-  gpu?: string;
-  ram_gb?: number;
-  internal_storage_gb?: number;
-  expandable_memory?: boolean;
-  battery_capacity?: number;
-  quick_charging?: string;
-  bluetooth_version?: string;
-  network?: string;
-  wlan?: string;
-  usb?: string;
-  usb_otg?: boolean;
-  usb_type_c?: boolean;
-  
-  // Display specifications
-  screen_size?: number;
-  resolution?: string;
-  pixel_density?: number;
-  refresh_rate?: number;
-  brightness?: number;
-  aspect_ratio?: string;
-  screen_protection?: string;
-  screen_to_body_ratio?: number;
-  touch_screen?: string;
-  notch?: string;
-  edge?: boolean;
-  
-  // Physical specifications
-  height?: number;
-  width?: number;
-  thickness?: number;
-  weight?: number;
-  ip_rating?: string;
-  waterproof?: string;
-  ruggedness?: string;
-  
-  // Camera specifications
-  primary_camera_resolution?: string;
-  primary_camera_features?: string;
-  primary_camera_autofocus?: boolean;
-  primary_camera_flash?: boolean;
-  primary_camera_image_resolution?: string;
-  video?: string;
-  
-  // Audio features
-  audio_jack?: string;
-  loudspeaker?: boolean;
-  
-  // Additional features
-  features?: string;
-  face_unlock?: boolean;
-  gps?: string;
-  gprs?: boolean;
-  volte?: boolean;
-  sim_size?: string;
-  sim_slot?: string;
-  speed?: string;
-  
-  // Lookup table names
-  chipset_name?: string;
-  os_name?: string;
-  os_version?: string;
-  user_interface?: string;
-  display_type_name?: string;
-  storage_type_name?: string;
-  ram_type_name?: string;
-  
-  // Pricing information
-  price_official?: number;
-  price_unofficial?: number;
-  price_old?: number;
-  price_savings?: number;
-  price_updated?: string;
-  variant_description?: string;
-  
-  // Additional data from separate queries
-  colors?: string[];
-  pricing_variants?: Array<{
-    price_official?: number;
-    price_unofficial?: number;
-    price_old?: number;
-    price_savings?: number;
-    price_updated?: string;
-    variant_description?: string;
-  }>;
 }
 
 export default function PhoneDetails({ phoneId, isOpen, onClose }: PhoneDetailsProps) {
@@ -119,67 +17,66 @@ export default function PhoneDetails({ phoneId, isOpen, onClose }: PhoneDetailsP
   const [sqlQuery, setSqlQuery] = useState<string | null>(null);
   const [executionTime, setExecutionTime] = useState<number | null>(null);
   const [showSQLPopup, setShowSQLPopup] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const requestSequence = useRef(0);
 
-  // Fetch phone details when phoneId changes and modal is open
-  useEffect(() => {
-    if (phoneId && isOpen) {
-      fetchPhoneDetails(phoneId);
-    } else if (!isOpen) {
-      // Reset SQL popup state when modal closes
-      setSqlQuery(null);
-      setExecutionTime(null);
-      setShowSQLPopup(false);
-    }
-  }, [phoneId, isOpen]);
-
-  // Handle escape key
   const handleEscapeKey = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
       onClose();
     }
   }, [onClose]);
 
+  const fetchPhoneDetails = useCallback(async (id: number) => {
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+    setLoading(true);
+    setError(null);
+    setPhone(null);
+
+    const response = await apiClient.getPhoneDetails(id);
+    if (sequence !== requestSequence.current) return;
+
+    if (response.success && response.data) {
+      setPhone(response.data.phone);
+      setSqlQuery(response.meta?.diagnostics?.sql || null);
+      setExecutionTime(response.meta?.diagnostics?.executionTime ?? null);
+      setShowSQLPopup(Boolean(response.meta?.diagnostics));
+    } else {
+      setError(response.error?.message || 'Failed to load phone details.');
+    }
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
+    if (!isOpen || phoneId === null) {
+      requestSequence.current += 1;
+      setLoading(false);
+      setSqlQuery(null);
+      setExecutionTime(null);
+      setShowSQLPopup(false);
+      return;
+    }
+    void fetchPhoneDetails(phoneId);
+  }, [fetchPhoneDetails, isOpen, phoneId]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
     if (isOpen) {
       document.addEventListener('keydown', handleEscapeKey);
-      document.body.style.overflow = 'hidden'; // Prevent background scrolling
+      document.body.style.overflow = 'hidden';
     } else {
       document.removeEventListener('keydown', handleEscapeKey);
-      document.body.style.overflow = 'unset';
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscapeKey);
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = previousOverflow;
     };
   }, [isOpen, handleEscapeKey]);
 
-  const fetchPhoneDetails = async (id: number) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await apiClient.getPhoneDetails(id);
-      
-      if (response.success && response.data) {
-        setPhone(response.data.phone);
-        setSqlQuery(response.sqlQuery || null);
-        setExecutionTime(response.executionTime || null);
-        
-        // Show SQL popup when query is available
-        if (response.sqlQuery) {
-          setShowSQLPopup(true);
-        }
-      } else {
-        setError(response.error?.message || 'Failed to load phone details');
-      }
-    } catch (err) {
-      console.error('Error fetching phone details:', err);
-      setError('Failed to connect to server');
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    if (isOpen) modalRef.current?.focus();
+  }, [isOpen]);
 
   const formatPrice = (price?: number) => {
     if (!price || price === 0) return null;
@@ -215,14 +112,22 @@ export default function PhoneDetails({ phoneId, isOpen, onClose }: PhoneDetailsP
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black bg-opacity-50 transition-opacity"
         onClick={onClose}
+        aria-hidden="true"
       />
       
       {/* Modal */}
       <div className="flex items-center justify-center min-h-screen p-4">
-        <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+        <div
+          ref={modalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="phone-details-title"
+          tabIndex={-1}
+          className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden outline-none"
+        >
           {/* Modal SQL Popup - positioned at top-right of modal */}
           {showSQLPopup && sqlQuery && (
             <div className="absolute top-4 right-4 z-50">
@@ -244,7 +149,7 @@ export default function PhoneDetails({ phoneId, isOpen, onClose }: PhoneDetailsP
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                <h2 id="phone-details-title" className="text-xl font-bold text-gray-900 dark:text-white">
                   Phone Details
                 </h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -255,6 +160,7 @@ export default function PhoneDetails({ phoneId, isOpen, onClose }: PhoneDetailsP
             
             <button
               onClick={onClose}
+              aria-label="Close phone details"
               className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
             >
               <svg className="w-6 h-6 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -290,7 +196,7 @@ export default function PhoneDetails({ phoneId, isOpen, onClose }: PhoneDetailsP
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
                   <button
-                    onClick={() => phoneId && fetchPhoneDetails(phoneId)}
+                    onClick={() => phoneId !== null && void fetchPhoneDetails(phoneId)}
                     className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors duration-200"
                   >
                     Try Again
@@ -517,7 +423,7 @@ export default function PhoneDetails({ phoneId, isOpen, onClose }: PhoneDetailsP
                       {phone.screen_size && (
                         <div className="flex justify-between">
                           <span className="text-gray-600 dark:text-gray-400">Screen Size</span>
-                          <span className="font-medium text-gray-900 dark:text-white">{phone.screen_size}"</span>
+                          <span className="font-medium text-gray-900 dark:text-white">{phone.screen_size}&quot;</span>
                         </div>
                       )}
                       {phone.display_type_name && (
