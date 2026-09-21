@@ -4,6 +4,11 @@ PhoneDB is a two-process web application with MySQL as its persistence layer.
 The frontend and API are intentionally kept as separate runtime boundaries so
 each can be developed, tested, and operated independently.
 
+The product concept is recommendation-oriented: user priorities reduce a large
+candidate set until the trade-offs are practical to review. The current
+runtime implements structured filtering, details, and comparison. It does not
+contain a weighted scoring or automatic primary-recommendation service.
+
 ## Runtime components
 
 ### Web application
@@ -43,6 +48,10 @@ Migrations are applied by MigrationRunner before the API is considered ready.
 CSVSeeder reads the configured source file and processes each valid device in a
 transaction. Lookup tables are cached per run and device-specific collections
 are replaced idempotently.
+
+The tracked CSV is the output boundary of an upstream collection process. The
+original crawler is not part of this repository; the runtime begins at CSV
+validation and ingestion.
 
 ## Request and data flow
 

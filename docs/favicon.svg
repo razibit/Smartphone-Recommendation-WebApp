@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>PhoneDB</title>
+  <rect width="64" height="64" rx="14" fill="#dbff70" />
+  <path d="M21 14h13c6.075 0 11 4.925 11 11v14c0 6.075-4.925 11-11 11H21V14Zm8 8v20h5c2.761 0 5-2.239 5-5V27c0-2.761-2.239-5-5-5h-5Z" fill="#0b1220" />
+</svg>
