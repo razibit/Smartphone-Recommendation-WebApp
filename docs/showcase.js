@@ -103,6 +103,7 @@
   const demoCount = document.querySelector("#demo-count");
   const budgetInput = document.querySelector("#demo-budget");
   const budgetOutput = document.querySelector("#budget-output");
+  const demoSummary = document.querySelector("#demo-summary");
 
   const formatPrice = (value) => `৳${value.toLocaleString("en-IN")}`;
 
@@ -158,6 +159,15 @@
     budgetOutput.textContent = formatPrice(budget);
     demoCount.textContent = `${matches.length} ${matches.length === 1 ? "candidate" : "candidates"}`;
 
+    if (demoSummary) {
+      demoSummary.innerHTML = [
+        `Up to ${formatPrice(budget)}`,
+        `${ram} GB+ RAM`,
+        `${storage} GB+ storage`,
+        `${battery.toLocaleString("en-IN")} mAh+`,
+      ].map((label) => `<span>${label}</span>`).join("");
+    }
+
     if (matches.length === 0) {
       demoOutput.innerHTML = `
         <div class="result-empty">
@@ -181,7 +191,17 @@
     demoForm.addEventListener("submit", (event) => event.preventDefault());
     demoForm.addEventListener("input", updateDemo);
     demoForm.addEventListener("change", updateDemo);
+    demoForm.addEventListener("reset", () => window.setTimeout(updateDemo, 0));
     updateDemo();
+  }
+
+  const workflowSteps = document.querySelectorAll(".workflow-step");
+  if (workflowSteps.length && "IntersectionObserver" in window) {
+    const workflowObserver = new IntersectionObserver(
+      (entries) => entries.forEach((entry) => entry.target.classList.toggle("is-active", entry.isIntersecting)),
+      { threshold: 0.55 },
+    );
+    workflowSteps.forEach((step) => workflowObserver.observe(step));
   }
 
   const currentYear = document.querySelector("#current-year");
